@@ -1,7 +1,11 @@
 <template>
-  <div class='grid-stack grid-stack-12'>
-    <div class="grid-stack-item" gs-w="3">
-      <div class="grid-stack-item-content">Test</div>
+  <div id="ui-bar">
+    <div class='grid-stack grid-stack-12'>
+      <u-i-item 
+        v-for="item in items"
+        :key="item.id"
+        :itemData="item"
+      />
     </div>
   </div>
 </template>
@@ -11,18 +15,24 @@ import { ref, onMounted } from 'vue'
 import { GridStack } from 'gridstack'
 import 'gridstack/dist/gridstack.min.css'
 import 'gridstack/dist/gridstack-extra.min.css'
-
 //import 'gridstack/dist/h5/gridstack-dd-native' 
 import 'gridstack/dist/jq/gridstack-dd-jqueryui' // to get legacy jquery-ui drag&drop (support Mobile touch devices, h5 does not yet)
 
+import UIItem from './UIItem.vue'
+
 export default {
+  name: 'UIBar',
+  props: [],
+  components: {
+    UIItem,
+  },
   setup(props, context){
     
     let grid = null;
 
     const items = [
       //{autoPosition, x, y, w, h, maxW, minW, maxH, minH, locked, noResize, noMove, resizeHandles, id, content, subGrid}
-      { x: 2, y: 0, h: 1 },
+      { x: 2, y: 0, h: 1, eventData: {click: context.clickTest}},
       { x: 0, y: 2, w: 4 },
       { x: 3, y: 1, h: 1 },
       { x: 3, y: 0, h: 1 },
@@ -34,8 +44,8 @@ export default {
       grid = GridStack.init({
         float: true,
         cellHeight: "25px",
-        margin: '2px',
-        row: 3,
+        margin: '0.5px',
+        row: 1,
         column: 12,
         minRow: 1,
         resizable: {
@@ -43,8 +53,6 @@ export default {
         },
         alwaysShowResizeHandle: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
       });
-
-      grid.load(items);
       
       //added, change, disable, dragstart, dragstop, dropped, enable, removed, resizestart, resize, resizestop
       grid.on('change', (event, items) => {
@@ -56,7 +64,14 @@ export default {
 
     return {
       grid,
+      items,
     };
+  },
+
+  methods: {
+    clickTest(e){
+      console.log('clicked', e);
+    }
   },
 }
 
@@ -64,36 +79,10 @@ export default {
 
 <style>
 
-
-  .grid-stack {
-    background: hsl(189, 100%, 91%);
-    width: 90%;
-  }
-
-  .grid-stack-item-content {
-    color: black;
-    text-align: center;
-    background-color: hsl(239, 77%, 42%);
-  }
-
-  .grid-stack-item-removing {
-    opacity: 0.5;
-  }
-  
-  /* extra */
-  .sidebar .grid-stack-item {
-    width: 120px;
-    height: 50px;
-    border: 2px dashed green;
-    text-align: center;
-    line-height: 35px;
-    z-index: 10;
-    background: rgba(0, 255, 0, 0.1);
-    cursor: default;
-    display: inline-block;
-  }
-  .sidebar .grid-stack-item .grid-stack-item-content {
-    background: none;
+  #ui-bar {
+    width: 1200px;
+    margin: 0 auto;
+    height: 100px;
   }
 </style>
 

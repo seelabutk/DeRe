@@ -1,5 +1,11 @@
 <template>
-  <div id="loom">
+  <div 
+    id="loom"
+    :style="{
+      height: config ? config.window.height + 'px' : '0px',
+      width:  config ? config.window.width + loomMenuWidth + 'px' : '0px',
+    }"
+  >
 
     <video 
       ref="videoPlayer" 
@@ -20,6 +26,8 @@
       :ref="'target' + target.id"
       :targetData="target"
       :showHint="hintHelpState"
+      @change-state="changeState"
+      @add-history="updateInteractionHistory"
     />
     
 
@@ -62,9 +70,6 @@
 
     </div>
 
-    
-
-    <div id="brushing-box" ref="brushing-box" :class="{ hide: showBrushingBox }"></div>
   </div>
 </template>
 
@@ -75,8 +80,8 @@ import Fuse from 'fuse.js'
 import loomTarget from './loomTarget.vue'
 
 //todo: make custom video test all actors/types one by one
-//get rid of everything but polygon shape
-//make conversion script for old config to new
+//todo: brushing backwards
+//what is linear? what is parallel? 
 
 export default {
   name: 'Loom2',
@@ -99,14 +104,13 @@ export default {
     config: null,
     current_state: null,
     targets: {},
+    interactionHistory: [],
+    maxHistoryLength: 100,
     fps: 30,
-    videoOptions: {
-      controls: false,
-    },
+    lastFrame: 0,
     loomMenuWidth: 120,
     hintHelpState: false,
     searchResults: [],
-    showBrushingBox: false,
   }),
 
   computed: {
@@ -141,20 +145,23 @@ export default {
 
     setupVideo(element){
       let self = this;
-      this.videoOptions.sources = [{
-        src: this.video_filename,
-        type: 'video/mp4',
-      }];
-      this.videoOptions.controlBar = false;
-      return videojs(element, this.videoOptions, function() {
-        videojs.options.children.loadingSpinner = false;
+      let videoOptions = {
+        sources: [{
+          src: this.video_filename,
+          type: 'video/mp4',
+        }],
+        controls: false,
+        loadingSpinner: false,
+        controlBar: false,
+      };
+      return videojs(element, videoOptions, function() {  
         this.on("click", function(ev) {
             ev.preventDefault();
         });
       });
     },
 
-    load(config_filename){
+    load(){
         return fetch(this.config_filename)
             .then(response => response.text())
             .then(config => JSON.parse(config))
@@ -174,13 +181,72 @@ export default {
         this.traverse(child);
       });
     },
+
+    updateInteractionHistory(target, e){
+      let interaction = {
+        id: target.frame_no,
+        target,
+        event: e,
+      }
+      this.interactionHistory.push(interaction);
+      if(this.interactionHistory.length > this.maxHistoryLength){
+        this.interactionHistory.shift();
+      }
+      this.runInteractionAnalysis();
+    },
+
+    runInteractionAnalysis(){
+      let {order, interactions} = this.calcMostFrequentInteractions();
+      order = order.filter(k => interactions[k].frames.length > 1); //filter out all single-buttons
+
+      for(let i = 0; i < Math.min(order.length, 30); ++i){ //choose 30 most relevant elements
+        let interaction = interactions[order[i]];
+        if(interaction.n >= 5){ //confidence of at least 5 occurrences
+          console.log(interaction);
+          //todo: remove from order, add to permanent memory, add element
+        }
+      }
+    },
+    calcMostFrequentInteractions(){
+      let n = this.interactionHistory.length;
+      let m = {};
+
+      for(let i = 0; i < n; ++i){
+        let ss = [];
+        let s = '';
+        for(let j = i; j < n; ++j){
+          
+          let {id} = this.interactionHistory[j];
+          ss.push(id);
+          s += '-' + String(id);
+
+          if (m[s] == undefined) m[s] = { frames: [], n: 0 };
+
+          m[s].frames = [...ss]; //clone
+          m[s].n++;
+        }
+      }
+
+      let ids = Object.keys(m);
+      ids.sort((a,b) => {
+        if(m[a].n > m[b].n)  return -1;
+        else if (m[a].n == m[b].n && m[a].frames.length > m[b].frames.length) return -1;
+        else return 1;
+      });
+
+      return {
+        order: ids,
+        interactions: m,
+      };
+    },
     
-    changeState(target, offset = 0) {
-        console.log("Frame", target.frame_no);
+    changeState(target, offset = 0){
         this.changeStateWithFrameNo(target.frame_no, offset);
     }, 
 
-    changeStateWithFrameNo(frame, offset = 0) {
+    changeStateWithFrameNo(frame, offset = 0){
+        console.log("Frame", frame);
+
         let target = this.targets[frame];
         if ( this.findChild(target, this.current_state) != null ||
           this.findSibling(target, this.current_state) != null ||
@@ -188,7 +254,11 @@ export default {
           target.name == "root"
         ) {
           this.current_state = target;
-          this.player.currentTime((frame + 1 + offset) / this.fps);
+          let actualFrame = frame + 1 + offset;
+          if(this.lastFrame != actualFrame) {
+            this.player.currentTime((frame + 1 + offset) / this.fps);
+            this.lastFrame = actualFrame;
+          }
         }
         this.drawMiniMap();
     },
@@ -235,7 +305,7 @@ export default {
           context.fill();
         }
 
-        if (target.shape.type == "poly") {
+        if (target.shape.type == "poly"){
           context.beginPath();
           context.moveTo(target.shape.points[0].x * ratio, target.shape.points[0].y * ratio);
           for (var j = 1; j < target.shape.points.length; j++)  {
@@ -247,7 +317,7 @@ export default {
       }
     },
 
-    findByName(name) {
+    findByName(name){
       for (var i in this.targets)
         if (this.targets[i].name == name)
           return this.targets[i];
@@ -255,7 +325,7 @@ export default {
     },
 
     // tries to find a target state in the immediate children of another based on its frame number
-    findChild(needle, haystack) {
+    findChild(needle, haystack){
         if (!haystack.hasOwnProperty("children")) return null; // then it's a leaf node
         for (var i = 0; i < haystack.children.length; i++)
           if (haystack.children[i].frame_no == needle.frame_no) 
@@ -264,7 +334,7 @@ export default {
     },
 
     // tries to find a target state (needle) in the siblings of another (other) based on its frame number
-    findSibling(needle, other) {
+    findSibling(needle, other){
         let par = (other.parent == "root" ? this.config : this.findByName(other.parent)); 
         if (par == null || !par.hasOwnProperty("children")) return null;
         for (var i = 0; i < par.children.length; i++)
@@ -316,7 +386,7 @@ export default {
           this.player.currentTime(1/this.fps);
         } else {
           let parent = this.findByName(target.parent);
-          this.changeStateWithFrameNo(parent.frame_no, 'player');
+          this.changeStateWithFrameNo(parent.frame_no);
         }
       }
 
@@ -327,13 +397,11 @@ export default {
   },
   created(){
     window.vue = this;
-    this.emitter.on('show-brushing-box', e => {
-      this.showBrushingBox = e;
+    this.load().then(() => {
+      this.current_state = this.targets[1];
+      this.changeState(this.current_state);
     });
-    this.emitter.on('changeState', (e) => {
-      this.changeState(...e);
-    });
-    this.load(this.config_filename);
+    
   },
   mounted(){
     this.player = this.setupVideo(this.$refs.videoPlayer);
@@ -362,8 +430,7 @@ export default {
 
   #loom-menu {
     border-radius: 0 10px 10px 0;
-    background-color: #7B8792;
-    border-left: 5px solid #5a6268;
+    background-color: rgb(45,45,45);
     width: 120px;
     height: 100%; 
     z-index: 10000;
@@ -392,7 +459,7 @@ export default {
     width: 100px;  
     margin: 0 auto;
     margin-top: 10px;
-    height: 10px;
+    height: 20px;
   }
 
   #hint-helper {
@@ -486,14 +553,6 @@ export default {
   {
     margin-top: 10px;
     border-radius: 5px;
-  }
-
-  .brushing-box{
-    display: none;
-    position: absolute;
-    left: 0;
-    top: 0;
-    border: 2px dashed #bbb;
   }
 
 </style>

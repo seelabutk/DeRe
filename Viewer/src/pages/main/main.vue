@@ -9,8 +9,8 @@
 </template>
 
 <script>
-import UIBar from '../components/UIBar.vue'
-import Loom2 from '../components/loom/loom2.vue'
+import UIBar from './components/UIBar/UIBar.vue'
+import Loom2 from './components/loom/loom2.vue'
 
 export default {
   name: 'MainPage',
@@ -28,4 +28,7 @@ export default {
 </script>
 
 <style scoped>
+#container {
+  height: 100%;
+}
 </style>

@@ -15,6 +15,19 @@ export default {
 </script>
 
 <style>
+* {
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  margin: 0px;
+}
+
+body {
+  background-color: rgb(30,30,30)
+}
+
 #app {
   font-family: Avenir, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
