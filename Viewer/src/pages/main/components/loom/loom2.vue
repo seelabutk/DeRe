@@ -97,6 +97,10 @@ export default {
       type: String,
       default: '/apps/test/video.mp4'
     },
+    shortcuts: {
+      type: Array,
+      default: {},
+    }
   },
 
   data: () => ({
@@ -111,6 +115,7 @@ export default {
     loomMenuWidth: 120,
     hintHelpState: false,
     searchResults: [],
+    confidence: 5,
   }),
 
   computed: {
@@ -198,12 +203,28 @@ export default {
     runInteractionAnalysis(){
       let {order, interactions} = this.calcMostFrequentInteractions();
       order = order.filter(k => interactions[k].frames.length > 1); //filter out all single-buttons
+      order = order.filter((k, i) => {
+        let lastFrame = interactions[k].frames[interactions[k].frames.length-1];
+        return !order.slice(0, i).some((e)=> lastFrame == interactions[e].frames[interactions[e].frames.length-1]);
+      }); //filter out all interactions that end with the same frame (same result)
+      order = order.filter(k => {
+        let lastFrame = interactions[k].frames[interactions[k].frames.length-1];
+        return !this.shortcuts.some(s => lastFrame == s.id);
+      }); //filter out previously added elements      
 
-      for(let i = 0; i < Math.min(order.length, 30); ++i){ //choose 30 most relevant elements
+      for(let i=0, j=0; i < order.length && j < 30; ++i){ //choose 30 most relevant elements
         let interaction = interactions[order[i]];
-        if(interaction.n >= 5){ //confidence of at least 5 occurrences
-          console.log(interaction);
+
+        if(interaction.n >= this.confidence){ //confidence of at least 5 occurrences
+          ++j;
+          let frame = interaction.frames[interaction.frames.length-1];
+          let target = this.targets[frame];
           //todo: remove from order, add to permanent memory, add element
+           this.shortcuts.push({
+             id: target.frame_no,
+             content: target.name,
+             target,
+           });
         }
       }
     },
@@ -245,7 +266,7 @@ export default {
     }, 
 
     changeStateWithFrameNo(frame, offset = 0){
-        console.log("Frame", frame);
+        // console.log("Frame", frame);
 
         let target = this.targets[frame];
         if ( this.findChild(target, this.current_state) != null ||
@@ -401,7 +422,7 @@ export default {
       this.current_state = this.targets[1];
       this.changeState(this.current_state);
     });
-    
+    this.emitter.on("changeState", this.changeState);
   },
   mounted(){
     this.player = this.setupVideo(this.$refs.videoPlayer);

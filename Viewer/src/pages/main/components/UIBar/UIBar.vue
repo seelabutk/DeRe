@@ -1,48 +1,45 @@
 <template>
   <div id="ui-bar">
-    <div class='grid-stack grid-stack-12'>
-      <u-i-item 
-        v-for="item in items"
-        :key="item.id"
-        :itemData="item"
-      />
-    </div>
+    <div class='grid-stack grid-stack-12'/>
   </div>
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { onMounted, watch, getCurrentInstance } from 'vue'
 import { GridStack } from 'gridstack'
 import 'gridstack/dist/gridstack.min.css'
 import 'gridstack/dist/gridstack-extra.min.css'
 //import 'gridstack/dist/h5/gridstack-dd-native' 
 import 'gridstack/dist/jq/gridstack-dd-jqueryui' // to get legacy jquery-ui drag&drop (support Mobile touch devices, h5 does not yet)
 
-import UIItem from './UIItem.vue'
-
 export default {
   name: 'UIBar',
-  props: [],
-  components: {
-    UIItem,
-  },
-  setup(props, context){
-    
-    let grid = null;
+  props: ['items'],
+  components: {},
 
-    const items = [
-      //{autoPosition, x, y, w, h, maxW, minW, maxH, minH, locked, noResize, noMove, resizeHandles, id, content, subGrid}
-      { x: 2, y: 0, h: 1, eventData: {click: context.clickTest}},
-      { x: 0, y: 2, w: 4 },
-      { x: 3, y: 1, h: 1 },
-      { x: 3, y: 0, h: 1 },
-      { x: 0, y: 0, w: 2, h: 1 },
-    ];
-    items.forEach((item, i) => item.content = i);
+  setup(props, context){
+    let grid = null;
+    
+    let app = getCurrentInstance(); //to access globalProperties (emitter)
+    const itemData = watch(()=>props.items, (propItems) => {
+      let items = propItems.map((item, i) => ({
+        ...item, 
+        id: i, 
+        w: 1,
+        h: 1,
+      }));
+      grid.removeAll();
+      items.forEach(item => {
+        let widget = grid.addWidget(item);
+        widget.addEventListener('click', e => { //not very vue-like cuz gridstack sucks.
+          app.appContext.config.globalProperties.emitter.emit('changeState', item.target);
+        });
+      });
+    });
 
     onMounted(() => {
       grid = GridStack.init({
-        float: true,
+        float: false,
         cellHeight: "25px",
         margin: '0.5px',
         row: 1,
@@ -55,24 +52,18 @@ export default {
       });
       
       //added, change, disable, dragstart, dragstop, dropped, enable, removed, resizestart, resize, resizestop
-      grid.on('change', (event, items) => {
+      /* grid.on('change', (event, items) => {
         items.forEach(item => {
-          console.log(event.type, item);
+          console.log('change! ', item);
         })
-      });
+      }); */
     });
 
     return {
       grid,
-      items,
+      itemData,
     };
-  },
-
-  methods: {
-    clickTest(e){
-      console.log('clicked', e);
-    }
-  },
+  }
 }
 
 </script>
@@ -84,5 +75,16 @@ export default {
     margin: 0 auto;
     height: 100px;
   }
+
+  .grid-stack-item {
+    cursor: pointer;
+  }
+
+ .grid-stack-item-content {
+    color: rgb(204,204,204);
+    text-align: center;
+    background-color: rgb(45,45,45)
+  }
+
 </style>
 

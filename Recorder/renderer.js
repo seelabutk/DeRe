@@ -209,8 +209,8 @@ function runInteraction()
         !isNaN(parseFloat(delay)) && isFinite(delay) ? " " + delay : " 250";
     let cmd =
         process.platform === "win32"
-        ? "python interact.py ./viewer/config.json 1000"
-        : "python interact.py ./viewer/config.json 1000";
+        ? "python interact.py config.json 1000"
+        : "python interact.py config.json 1000";
     GC.interactor = execute(cmd + delay, function(output) {
         //console.log(output);
     });

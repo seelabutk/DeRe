@@ -1,9 +1,12 @@
 <template>
   <div id="container">
-    <UIBar />
+    <UIBar 
+      :items="dataItems"
+    />
     <loom2
       config_filename="/apps/tableau/config.json"
       video_filename="/apps/tableau/video.mp4"
+      :shortcuts="items"
     />
   </div>
 </template>
@@ -18,11 +21,25 @@ export default {
     UIBar,
     Loom2,
   },
-  data: () => ({
-    
-  }),
+  computed: {
+    dataItems: function(){
+      return this.items.map((item, i) => ({
+        ...item, 
+        id: i, 
+        w: 1,
+        h: 1,
+      }));
+    }
+  },
+  data: function(){
+    return {
+      items: [],
+    };
+  },
   methods: {
-
+    onClick(e){
+      console.log('clicked! ', e);
+    }
   }
 }
 </script>

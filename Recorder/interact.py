@@ -435,6 +435,7 @@ if __name__ == '__main__':
       os.system("rm images/*.png")
     config_filename = sys.argv[1]
     configs = {}
+    print(config_filename)
     with open(config_filename) as fp:
         configs = json.load(fp)
 

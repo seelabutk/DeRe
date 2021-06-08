@@ -101,7 +101,7 @@ module.exports = {
 
     save: function(data)
     {
-        fs.writeFile("./viewer/config.json", 
+        fs.writeFile("./config.json", 
             JSON.stringify(data), 
             () => {}); 
     }
