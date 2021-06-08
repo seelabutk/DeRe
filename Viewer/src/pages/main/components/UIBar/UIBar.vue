@@ -20,8 +20,10 @@ export default {
   setup(props, context){
     let grid = null;
     
-    let app = getCurrentInstance(); //to access globalProperties (emitter)
-    const itemData = watch(()=>props.items, (propItems) => {
+    const app = getCurrentInstance(); //to access globalProperties (emitter)
+    watch(()=>props.items, (propItems) => {
+
+      console.log(propItems);
       let items = propItems.map((item, i) => ({
         ...item, 
         id: i, 
@@ -61,7 +63,6 @@ export default {
 
     return {
       grid,
-      itemData,
     };
   }
 }

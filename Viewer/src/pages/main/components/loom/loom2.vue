@@ -102,7 +102,7 @@ export default {
     },
     shortcuts: {
       type: Array,
-      default: {},
+      default: [],
     }
   },
 
@@ -223,11 +223,11 @@ export default {
           let frame = interaction.frames[interaction.frames.length-1];
           let target = this.targets[frame];
           //todo: remove from order, add to permanent memory, add element
-           this.shortcuts.push({
-             id: target.frame_no,
-             content: target.name,
-             target,
-           });
+          this.$emit("addShortcut", {
+            id: target.frame_no,
+            content: target.name,
+            target,
+          });
         }
       }
     },

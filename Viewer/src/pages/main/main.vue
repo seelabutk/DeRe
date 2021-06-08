@@ -6,6 +6,7 @@
     <loom2
       directory="/apps/nytimes"
       :shortcuts="items"
+      @add-shortcut="items = items.concat($event)"
     />
   </div>
 </template>
@@ -20,17 +21,11 @@ export default {
     UIBar,
     Loom2,
   },
-  computed: {},
   data: function(){
     return {
       items: [],
     };
   },
-  methods: {
-    onClick(e){
-      console.log('clicked! ', e);
-    }
-  }
 }
 </script>
 
