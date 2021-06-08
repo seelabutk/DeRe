@@ -1,11 +1,10 @@
 <template>
   <div id="container">
     <UIBar 
-      :items="dataItems"
+      :items="items"
     />
     <loom2
-      config_filename="/apps/tableau/config.json"
-      video_filename="/apps/tableau/video.mp4"
+      directory="/apps/nytimes"
       :shortcuts="items"
     />
   </div>
@@ -21,16 +20,7 @@ export default {
     UIBar,
     Loom2,
   },
-  computed: {
-    dataItems: function(){
-      return this.items.map((item, i) => ({
-        ...item, 
-        id: i, 
-        w: 1,
-        h: 1,
-      }));
-    }
-  },
+  computed: {},
   data: function(){
     return {
       items: [],

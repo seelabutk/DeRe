@@ -89,13 +89,16 @@ export default {
     loomTarget,
   },
   props: {
+    directory: {
+      type: String,
+    },
     config_filename: {
       type: String,
-      default: '/apps/test/config.json'
+      default: 'config.json'
     },
     video_filename: {
       type: String,
-      default: '/apps/test/video.mp4'
+      default: 'video.mp4'
     },
     shortcuts: {
       type: Array,
@@ -152,7 +155,7 @@ export default {
       let self = this;
       let videoOptions = {
         sources: [{
-          src: this.video_filename,
+          src: this.directory + '/' + this.video_filename,
           type: 'video/mp4',
         }],
         controls: false,
@@ -167,7 +170,7 @@ export default {
     },
 
     load(){
-        return fetch(this.config_filename)
+        return fetch(this.directory + '/' + this.config_filename)
             .then(response => response.text())
             .then(config => JSON.parse(config))
             .then(config => this.init(config));
@@ -307,34 +310,15 @@ export default {
           this.findSibling(target, this.current_state) == null &&
           target.parent != "root")  continue;
 
-        if (target.shape.type == "rect") {
-          context.fillRect(
-            target.shape.x * ratio, 
-            target.shape.y * ratio, 
-            target.shape.width * ratio, 
-            target.shape.height * ratio
-          );
-        }
+        if (target.shape.type != "poly")  throw("Error, non-poly shape, run convert script");
 
-        if (target.shape.type == "circ") {
-          context.beginPath();
-          context.arc(target.shape.centerX * ratio, 
-            target.shape.centerY * ratio, 
-            target.shape.radius * ratio,
-            0, 
-            2 * Math.PI);
-          context.fill();
+        context.beginPath();
+        context.moveTo(target.shape.points[0].x * ratio, target.shape.points[0].y * ratio);
+        for (var j = 1; j < target.shape.points.length; j++)  {
+          context.lineTo(target.shape.points[j].x * ratio, target.shape.points[j].y * ratio);
         }
-
-        if (target.shape.type == "poly"){
-          context.beginPath();
-          context.moveTo(target.shape.points[0].x * ratio, target.shape.points[0].y * ratio);
-          for (var j = 1; j < target.shape.points.length; j++)  {
-            context.lineTo(target.shape.points[j].x * ratio, target.shape.points[j].y * ratio);
-          }
-          context.closePath();
-          context.fill();
-        }
+        context.closePath();
+        context.fill();
       }
     },
 

@@ -31,20 +31,26 @@ class Conversion:
 
     def _find(self, needle, haystack):
         for key, val in needle.items():
+            
             if not self.isIn(key, haystack):
                 return None
             else:
-                if self.isPrimitive(val):
+                if val == '*':
+                    return haystack
+                elif self.isPrimitive(val):
                     return haystack if self.get(key, haystack) == val else None
                 else:
                     return haystack if self._find(val, haystack[key]) is not None else None
 
-    def _traverse(self, haystack):
+    def _traverse(self, haystack, parent=None):
         rets = []
         if isinstance(haystack, list):
             for val in haystack:
                 if self.isPrimitive(val):
                     continue # leaf node
+                if not isinstance(val, list) and '__parent__' not in val:
+                    val['__parent__'] = parent
+                    
                 found = self._find(self.needle, val)
                 if found is not None:
                     rets.append(found)
@@ -53,14 +59,17 @@ class Conversion:
                 rets.extend(self._traverse(val))
         elif isinstance(haystack, dict):
             for key, val in haystack.items():
-                if self.isPrimitive(val):
+                if self.isPrimitive(val) or key == "__parent__":
                     continue #leaf node
+                if not isinstance(haystack[key], list) and '__parent__' not in haystack[key]:
+                    haystack[key]['__parent__'] = haystack
+                
                 found = self._find(self.needle, val)
                 if found is not None:
                     rets.append(found)
                     if not self.recurse:
                         continue
-                rets.extend(self._traverse(val))
+                rets.extend(self._traverse(val, haystack))
         elif self.isPrimitive(haystack):
             pass #leaf node
         else:
@@ -77,11 +86,6 @@ class Conversion:
         rets.extend(self._traverse(haystack))
         return rets
         
-
-        
-        
-
-
 
 class ConfigConverter:
     def __init__(self, conversions = []):
@@ -100,14 +104,31 @@ class ConfigConverter:
         return obj
 
     def convert(self, config):
-        #config = self.toDicts(config)
+        self.addConversion(Conversion(find = {"__parent__": "*"}, convert = self.delParent))
         for conversion in self.conversions:
             objs = conversion.find(config)
             for i in range(len(objs)):
                 conversion.convert(objs[i])
         return config
+    
+    def delParent(self, obj):
+        del obj['__parent__']
 
 
+
+
+#Version 0.0.1 (nytimes)
+def rectToShape(obj):
+    rect = obj['rect']
+    del obj['rect']
+    obj['shape'] = rect
+    obj['shape']['type'] = 'rect'
+
+def add_parents(obj):
+    if '__parent__' in obj:
+        obj['parent'] = obj['__parent__']['name']
+
+#Version 0.0.2 (tableau)
 def rectToPoly(obj):
     rect = obj['shape']
     points = [
@@ -123,14 +144,9 @@ def rectToPoly(obj):
         "centerY": (2*rect['y'] + rect['height'])/2
     }
 
-def brushToPoly(obj):
-    rectToPoly(obj)
-
 def polyAddDim(obj):
-
     minx = miny =  10000000
     maxx = maxy = -10000000
-
     for v in obj['shape']['points']:
         x = v['x']
         y = v['y']
@@ -138,7 +154,6 @@ def polyAddDim(obj):
         maxx = max(maxx, x)
         miny = min(miny, y)
         maxy = max(maxy, y)
-
     obj['shape']['dimensions'] = {
         "min_x": minx,
         "max_x": maxx,
@@ -147,29 +162,43 @@ def polyAddDim(obj):
         "centerX": (maxx + minx)/2,
         "centerY": (maxy + miny)/2,
     }
-
     del obj['shape']['centerX']
     del obj['shape']['centerY']
 
-
+#todo
 def circToPoly(obj):
     obj['shape'] = 20
+
+#Version 0.0.3 (current)
 
 def main(ifile, ofile):
 
     with open(ifile, 'r') as fin, open(ofile, 'w') as fout:
-        
         iconfig = json.load(fin)
 
-        configConverter = ConfigConverter([
-            Conversion(find = {"actor": "brush"}, convert = brushToPoly),
-            Conversion(find = {"shape": {"type": "rect"}}, convert = rectToPoly),
-            Conversion(find = {"shape": {"type": "circ"}}, convert = circToPoly),
-            Conversion(find = {"shape": {"type": "poly"}}, convert = polyAddDim)
-        ])
+        if iconfig['version'] == '0.0.1':
+            configConverter = ConfigConverter([
+                Conversion(find = {"rect": "*"}, convert = rectToShape),
+                Conversion(find = {"id": "*"}, convert = add_parents)
+            ])
+            iconfig = configConverter.convert(iconfig)
+            iconfig['version'] = '0.0.2'
 
-        newConfig = configConverter.convert(iconfig)
-        json.dump(newConfig, fout)
+        if iconfig['version'] == '0.0.2':
+            configConverter = ConfigConverter([
+                Conversion(find = {"actor": "brush"}, convert = rectToPoly),
+                Conversion(find = {"shape": {"type": "rect"}}, convert = rectToPoly),
+                Conversion(find = {"shape": {"type": "circ"}}, convert = circToPoly),
+                Conversion(find = {"shape": {"type": "poly"}}, convert = polyAddDim)
+            ])
+            iconfig = configConverter.convert(iconfig)
+            iconfig['version'] = '0.0.3'
+            
+        if iconfig['version'] == '0.0.3':
+            print("latest version")
+
+        
+        json.dump(iconfig, fout)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
