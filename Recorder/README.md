@@ -1,22 +1,24 @@
-## config.json format
+# recorder
+
+## Project setup
 ```
-{
-  "window": {
-    "x": 1, 
-    "y": 1, 
-    "width": 1, 
-    "height": 1
-  
-  },
-  "targets": [
-    {
-      "type": "linear",
-      "actor": "arcball"
-    },
-    {
-      "type": "helper",
-      "actor": "arcball-reset"
-    }
-  ]
-}
+yarn install
 ```
+
+### Compiles and hot-reloads for development
+```
+yarn serve
+```
+
+### Compiles and minifies for production
+```
+yarn build
+```
+
+### Lints and fixes files
+```
+yarn lint
+```
+
+### Customize configuration
+See [Configuration Reference](https://cli.vuejs.org/config/).
