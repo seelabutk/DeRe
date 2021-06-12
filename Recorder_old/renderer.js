@@ -214,6 +214,7 @@ function runInteraction()
     GC.interactor = execute(cmd + delay, function(output) {
         //console.log(output);
     });
+    execute("python convert.py config.json config.json")
 }
 
 /* 

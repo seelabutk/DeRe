@@ -447,5 +447,6 @@ if __name__ == '__main__':
     configs, helpers = extractHelpers(configs)
     configs = interact(configs, helpers)
     with open(config_filename, 'w') as fp:
+        configs['version'] = '0.0.2'
         fp.write(json.dumps(configs))
 

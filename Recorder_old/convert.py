@@ -173,7 +173,7 @@ def circToPoly(obj):
 
 def main(ifile, ofile):
 
-    with open(ifile, 'r') as fin, open(ofile, 'w') as fout:
+    with open(ifile, 'r') as fin:
         iconfig = json.load(fin)
 
         if iconfig['version'] == '0.0.1':
@@ -197,7 +197,7 @@ def main(ifile, ofile):
         if iconfig['version'] == '0.0.3':
             print("latest version")
 
-        
+    with open(ofile, 'w') as fout:
         json.dump(iconfig, fout)
 
 if __name__ == "__main__":
