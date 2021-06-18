@@ -1,28 +1,45 @@
 <template>
   <div>
-    <img alt="Vue logo" src="./assets/logo.png">
-    <HelloWorld msg="Welcome to Your Vue.js App"/>
+    <button @click='onClick'> click me </button>
   </div>
 </template>
 
 <script>
-import HelloWorld from './components/HelloWorld.vue'
-
+//import HelloWorld from './components/HelloWorld.vue'
+ 
 export default {
   name: 'App',
+  
   components: {
-    HelloWorld
+    //HelloWorld
   },
-  mounted(){
+  
+  async mounted(){
     window.ipc.on('READ_FILE', (payload) => {
       console.log(payload.content);
     });
   },
+
   methods: {
     readFile(path) {
       const payload = { path };
       window.ipc.send('READ_FILE', payload);
-    }
+    },
+
+    async onClick(){
+      const ai = window.inspect;
+      const sleep = (waitTimeInMs) => new Promise(resolve => setTimeout(resolve, waitTimeInMs));
+
+      await ai.screenshot();
+      console.log('move screen');
+      await sleep(2000);
+      await ai.screenshot();
+      console.log('calcing...');
+      const {contours, regions} = ai.compareScreenshots();
+
+      console.log('contours: ', contours);
+      console.log('regions: ', regions);
+    },
   },
 }
 </script>

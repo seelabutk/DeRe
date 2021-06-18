@@ -83,10 +83,10 @@ Napi::Value getWindowRect(const Napi::CallbackInfo &info){
     return env.Null();
 
   Napi::Object obj = Napi::Object::New(env);
-  obj.Set(Napi::String::New(env, "left"  ), Napi::Number::New(env, rect.left  ));
-  obj.Set(Napi::String::New(env, "top"   ), Napi::Number::New(env, rect.top   ));
-  obj.Set(Napi::String::New(env, "right" ), Napi::Number::New(env, rect.right ));
-  obj.Set(Napi::String::New(env, "bottom"), Napi::Number::New(env, rect.bottom));
+  obj.Set(Napi::String::New(env, "left"  ), Napi::Number::New(env, rect.left + 8  ));
+  obj.Set(Napi::String::New(env, "top"   ), Napi::Number::New(env, rect.top + 8   ));
+  obj.Set(Napi::String::New(env, "right" ), Napi::Number::New(env, rect.right - 8 ));
+  obj.Set(Napi::String::New(env, "bottom"), Napi::Number::New(env, rect.bottom - 8));
   return obj;
 }
 
@@ -116,6 +116,10 @@ Napi::Value printWindow(const Napi::CallbackInfo &info){
   hwnd = (HWND)info[0].As<Napi::Number>().Int64Value();
   
   GetWindowRect(hwnd, &rect);
+  rect.left += 8;  
+  rect.top += 8; 
+  rect.right -= 8; 
+  rect.bottom -= 8;
   width = rect.right - rect.left;
   height = rect.bottom - rect.top;
   

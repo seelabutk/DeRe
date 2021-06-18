@@ -4,6 +4,7 @@
   "description": "addon for Recorder",
   "main": "main.js",
   "devDependencies": {
+    "electron-rebuild": "^2.3.5",
     "node-gyp": "^8.1.0"
   },
   "dependencies": {
@@ -13,6 +14,7 @@
   },
   "gypfile": true,
   "scripts": {
-    "test": "node --napi-modules ./test/index.js"
+    "rebuild": "electron-rebuild -v 12.0.10",
+    "test": "node ./test.js"
   }
 }
