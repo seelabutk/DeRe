@@ -5,19 +5,40 @@ import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
 import installExtension, { VUEJS_DEVTOOLS } from 'electron-devtools-installer'
 import path from 'path'
 import fs from 'fs'
+import { EventEmitter } from 'events'
+
+const appInspect = require('./appInspect');
+const addon = __non_webpack_require__('../../addon/main');
+
+
+
+
 
 const isDevelopment = process.env.NODE_ENV !== 'production'
 
 // Scheme must be registered before the app is ready
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { secure: true, standard: true } }
-])
+]);
+
+const globalShare = {
+  win: null,
+  hwnd: null,
+  ehwnd: null,
+  emitter: null,
+  addon: addon,
+  appInspect: null,
+  makeNewWindowSelectable: null,
+}
 
 async function createWindow() {
-  // Create the browser window.
-  const win = new BrowserWindow({
+  globalShare.emitter = new EventEmitter();
+  globalShare.win = new BrowserWindow({
     width: 800,
     height: 600,
+    transparent: true,
+    frame: false,
+    backgroundColor: "#00000000",
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -25,69 +46,101 @@ async function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
     }
   });
+  //globalShare.win.setIgnoreMouseEvents(true);
+  globalShare.win.webContents.openDevTools();
 
+  globalShare.win.webContents.on('did-finish-load', () => {
+
+    globalShare.ehwnd = globalShare.win.webContents.getOSProcessId();
+    globalShare.hwnd = addon.GetForegroundWindow();
+    let selectNewWindow = true;
+
+    //window handlers  
+    globalShare.win.on('blur', e => {
+      if(selectNewWindow){
+        let fhwnd = addon.GetForegroundWindow();
+        if(fhwnd != 0 && fhwnd != globalShare.ehwnd){
+          globalShare.hwnd = fhwnd;
+          console.log('new window: ', globalShare.hwnd);
+          addon.SetWatchWindow(globalShare.hwnd);
+        }
+      }
+      if(globalShare.hwnd)  selectNewWindow = false;
+    });
+    globalShare.win.on('focus', e => {
+      showWindow();
+      globalShare.win.webContents.send('focus', globalShare.hwnd);
+    });
+    globalShare.win.on('minimize', e => hideWindow());
+    globalShare.win.on('restore', e => showWindow());
+    
+    globalShare.makeNewWindowSelectable = () => {
+      console.log('function!')
+      selectNewWindow = true;
+    }
+  
+    
+    //helper functions
+    function showWindow(){
+      let rect;
+      if(globalShare.hwnd){
+        rect = addon.GetWindowRect(globalShare.hwnd);
+      } else {
+        rect = { left: 0, top: 0, right: 800, bottom: 600 };
+      }
+      globalShare.win.setPosition(rect.left, rect.top, false);
+      globalShare.win.setSize(rect.right-rect.left, rect.bottom-rect.top, false);
+      globalShare.win.show();
+    }
+    function hideWindow(){
+      globalShare.win.minimize();
+    }
+
+    globalShare.appInspect = new appInspect(globalShare.ehwnd, globalShare.hwnd);
+  });
+
+  ipcMain.handle('getGlobal', (event, payload) => {
+    const {attr, rest} = payload;
+    if(typeof globalShare[attr] === 'function') 
+      return globalShare[attr](...rest);
+    else
+      globalShare[attr];
+  });
+  globalShare.emitter.on('move', (event)=>{
+    console.log(event);
+  });
+
+  
+
+
+  //devServer stuff
   if (process.env.WEBPACK_DEV_SERVER_URL) {
-    // Load the url of the dev server if in development mode
-    await win.loadURL(process.env.WEBPACK_DEV_SERVER_URL)
-    if (!process.env.IS_TEST) win.webContents.openDevTools()
+    await globalShare.win.loadURL(process.env.WEBPACK_DEV_SERVER_URL);
   } else {
-    createProtocol('app')
-    // Load the index.html when not in development
-    win.loadURL('app://./index.html')
+    createProtocol('app');
+    globalShare.win.loadURL('app://./index.html');
   }
 }
 
-// Quit when all windows are closed.
-app.on('window-all-closed', () => {
-  // On macOS it is common for applications and their menu bar
-  // to stay active until the user quits explicitly with Cmd + Q
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
-})
 
-app.on('activate', () => {
-  // On macOS it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
-  if (BrowserWindow.getAllWindows().length === 0) createWindow()
-})
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
+app.on('window-all-closed', () => process.platform !== 'darwin' ? app.quit() : null);
+app.on('activate', () => BrowserWindow.getAllWindows().length === 0 ? createWindow() : null);
 app.on('ready', async () => {
   app.allowRendererProcessReuse = false;
   if (isDevelopment && !process.env.IS_TEST) {
-    // Install Vue Devtools
     try {
-      await installExtension(VUEJS_DEVTOOLS)
+      await installExtension(VUEJS_DEVTOOLS); // Install Vue Devtools
     } catch (e) {
-      console.error('Vue Devtools failed to install:', e.toString())
+      console.error('Vue Devtools failed to install:', e.toString());
     }
   }
-  console.log('NODE_MODULE_VERSION: ', process.versions.modules);
-  createWindow()
+  createWindow();
 })
 
-// Exit cleanly on request from parent process in development mode.
 if (isDevelopment) {
-  if (process.platform === 'win32') {
-    process.on('message', (data) => {
-      if (data === 'graceful-exit') {
-        app.quit()
-      }
-    })
-  } else {
-    process.on('SIGTERM', () => {
-      app.quit()
-    })
-  }
+  if (process.platform === 'win32')
+    process.on('message', (data) => data === 'graceful-exit' ? app.quit() : null);
+/*   else //no linux support
+    process.on('SIGTERM', () => app.quit()); */
 }
-
-
-
-// node context required functions for app - proxied through ipc
-ipcMain.on('READ_FILE', (event, payload) => {
-  const content = fs.readFileSync(payload.path);
-  event.reply('READ_FILE', {content});
-});

@@ -4,8 +4,10 @@ const addon = __non_webpack_require__('../../addon/main');
 const cv = require('opencv4nodejs');
 
 class AppInspector {
-  constructor(hwnd) {
+  constructor(overlay_hwnd, hwnd) {
+    this.overlay_hwnd = overlay_hwnd;
     this.hwnd = hwnd;
+    addon.init(this.overlay_hwnd, this.hwnd);
     this.screenshots = [];
     this.maxScreenshotHistory = 2;
   }

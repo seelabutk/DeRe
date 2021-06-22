@@ -14,7 +14,12 @@
     "electron:serve": "vue-cli-service electron:serve",
     "postinstall": "electron-builder install-app-deps",
     "postuninstall": "electron-builder install-app-deps",
-    "test": "node --napi-modules ./src/background/appInspect.js"
+    "test": "node --napi-modules ./src/background/appInspect.js",
+    "addon-rebuild": "yarn --cwd ../addon/"
+  },
+  "opencv4nodejs": {
+    "disableAutoBuild": 1,
+    "opencvBinDir": "./libs"
   },
   "main": "background.js",
   "dependencies": {

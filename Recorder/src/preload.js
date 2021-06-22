@@ -1,10 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const path = require("path");
 
-const appInspect = require('./background/appInspect');
-const addon = __non_webpack_require__('../../addon/main'); //why non_webpack_require? can I fix this with a loader? check vue.config.js.
-
-const validChannels = ['READ_FILE', 'WRITE_FILE'];
+const validChannels = ['READ_FILE', 'WRITE_FILE', 'focus'];
 contextBridge.exposeInMainWorld(
   'ipc', {
     send: (channel, data) => {
@@ -18,12 +14,6 @@ contextBridge.exposeInMainWorld(
         ipcRenderer.on(channel, (event, ...args) => func(...args));
       }
     },
+    getGlobal: (attr, ...rest) => ipcRenderer.invoke('getGlobal', {attr, rest: [...rest]}),
   },
 );
-contextBridge.exposeInMainWorld('inspect', (()=>{
-  const hwnd = addon.GetForegroundWindow();
-  const ai = new appInspect(hwnd);
-  Object.getOwnPropertyNames(ai.__proto__).forEach(v => {ai[v] = ai[v].bind(ai)}); //send prototypes as well
-  return ai;
-})());
-contextBridge.exposeInMainWorld('addon', addon);

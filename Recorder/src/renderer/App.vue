@@ -1,56 +1,66 @@
 <template>
   <div>
-    <button @click='onClick'> click me </button>
+    <button @click='changeWindowFocus'> Change Window Focus </button>
+
+    <loomTarget 
+      v-for="target in currentTargets"
+      :key="target.id" 
+      :ref="'target' + target.id"
+      :targetData="target"
+      :showHint="hintHelpState"
+    />
   </div>
 </template>
 
 <script>
-//import HelloWorld from './components/HelloWorld.vue'
+import loomTarget from './components/loomTarget.vue'
  
 export default {
   name: 'App',
   
   components: {
-    //HelloWorld
+    loomTarget
   },
-  
-  async mounted(){
-    window.ipc.on('READ_FILE', (payload) => {
-      console.log(payload.content);
-    });
+
+  data(){
+    return {
+      targets: [],
+      currentTargets: [],
+    };
   },
 
   methods: {
-    readFile(path) {
-      const payload = { path };
-      window.ipc.send('READ_FILE', payload);
-    },
-
-    async onClick(){
-      const ai = window.inspect;
-      const sleep = (waitTimeInMs) => new Promise(resolve => setTimeout(resolve, waitTimeInMs));
-
-      await ai.screenshot();
-      console.log('move screen');
-      await sleep(2000);
-      await ai.screenshot();
-      console.log('calcing...');
-      const {contours, regions} = ai.compareScreenshots();
-
-      console.log('contours: ', contours);
-      console.log('regions: ', regions);
-    },
+    changeWindowFocus(){
+      window.ipc.getGlobal('makeNewWindowSelectable');
+    }
   },
 }
 </script>
 
 <style>
+* {
+  box-sizing: border-box;
+  -webkit-app-region: no-drag;
+}
+
+html, body {
+  background-color: rgba(0,0,0,0.1);
+  width: 100%;
+  height: 100%;
+  margin: 0 auto;
+  padding: 0;
+  overflow: hidden;
+}
+
 #app {
   font-family: Avenir, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
-  color: #2c3e50;
-  margin-top: 60px;
+  color: #fff;
+
+  width: 100%;
+  height: 100%;
+  /* -webkit-app-region: drag; */
 }
 </style>
