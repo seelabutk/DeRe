@@ -4,7 +4,7 @@ import { app, protocol, BrowserWindow, ipcMain } from 'electron'
 import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
 import installExtension, { VUEJS_DEVTOOLS } from 'electron-devtools-installer'
 import path from 'path'
-import fs from 'fs'
+//import fs from 'fs'
 import { EventEmitter } from 'events'
 
 const appInspect = require('./appInspect');
@@ -25,14 +25,24 @@ const globalShare = {
   win: null,
   hwnd: null,
   ehwnd: null,
-  emitter: null,
-  addon: addon,
   appInspect: null,
   makeNewWindowSelectable: null,
-}
+  emitter: new EventEmitter(),
+  addon: addon,
+};
+
+ipcMain.handle('getGlobal', (event, payload) => {
+  const {attr, rest} = payload;
+  if(typeof globalShare[attr] === 'function') 
+    return globalShare[attr](...rest);
+  else
+    globalShare[attr];
+});
+globalShare.emitter.on('move', (event)=>{
+  console.log(event);
+});
 
 async function createWindow() {
-  globalShare.emitter = new EventEmitter();
   globalShare.win = new BrowserWindow({
     width: 800,
     height: 600,
@@ -61,7 +71,6 @@ async function createWindow() {
         let fhwnd = addon.GetForegroundWindow();
         if(fhwnd != 0 && fhwnd != globalShare.ehwnd){
           globalShare.hwnd = fhwnd;
-          console.log('new window: ', globalShare.hwnd);
           addon.SetWatchWindow(globalShare.hwnd);
         }
       }
@@ -75,7 +84,6 @@ async function createWindow() {
     globalShare.win.on('restore', e => showWindow());
     
     globalShare.makeNewWindowSelectable = () => {
-      console.log('function!')
       selectNewWindow = true;
     }
   
@@ -99,16 +107,7 @@ async function createWindow() {
     globalShare.appInspect = new appInspect(globalShare.ehwnd, globalShare.hwnd);
   });
 
-  ipcMain.handle('getGlobal', (event, payload) => {
-    const {attr, rest} = payload;
-    if(typeof globalShare[attr] === 'function') 
-      return globalShare[attr](...rest);
-    else
-      globalShare[attr];
-  });
-  globalShare.emitter.on('move', (event)=>{
-    console.log(event);
-  });
+  
 
   
 

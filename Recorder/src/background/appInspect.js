@@ -2,14 +2,30 @@
 
 const addon = __non_webpack_require__('../../addon/main');
 const cv = require('opencv4nodejs');
+const { EventEmitter } = require('events');
 
 class AppInspector {
   constructor(overlay_hwnd, hwnd) {
     this.overlay_hwnd = overlay_hwnd;
     this.hwnd = hwnd;
-    addon.init(this.overlay_hwnd, this.hwnd);
+    this.emitter = new EventEmitter();
+    addon.init(this.overlay_hwnd, this.hwnd, this.handler.bind(this));
     this.screenshots = [];
     this.maxScreenshotHistory = 2;
+  }
+
+  handler(e){
+    const callbackHandles = ['onFocus', 'onMinimize', 'onMove', 'onNameChange', 'onDestroy'];
+    const callbacks = {
+      'onFocus': ()=>console.log('focused'),
+      'onMinimize': ()=>console.log('minimized'),
+      'onMove': (e)=>console.log('moved: ', e),
+      'onNameChange': ()=>console.log('name changed'),
+      'onDestroy': ()=>console.log('destroyed'),
+    };
+    
+    callbacks[callbackHandles[e['type']]](e);
+    //this.emitter.emit('something', e);
   }
 
   appendScreenshot(shot) {

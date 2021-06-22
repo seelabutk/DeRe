@@ -5,12 +5,16 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <map>
 
 #define HOOK_EVENT WM_APP + 1
 #define UNHOOK_EVENT WM_APP + 2
 
+//https://github.com/nodejs/node-addon-examples/blob/main/emit_event_from_cpp/node-addon-api/index.js
+
 //global hook info
-struct window_info {
+static struct window_info {
+  //window handles
   HWND hwnd;
   HWND overlay_hwnd;
   //global hoooks
@@ -20,10 +24,12 @@ struct window_info {
   HWINEVENTHOOK move_hook;
   HWINEVENTHOOK kill_hook;
   HWINEVENTHOOK name_hook;
-
+  //threading
   DWORD threadId;
   HANDLE event_handle;
-};
+  //emitter
+  napi_threadsafe_function fn = NULL;
+} hook_info = {};
 
 //basic windows api bindings
 Napi::Value getWindowText(const Napi::CallbackInfo&);
@@ -43,11 +49,16 @@ void set_application_hooks(window_info*);
 void unset_global_hooks(window_info*);
 void unset_application_hooks(window_info*);
 void hook_thread(void*);
+void emit(std::map<const std::string, int>*);
+void fnToJs(napi_env, napi_value, void*, void*);
+napi_value mapToJs(Napi::Env, std::map<const std::string, int>*);
 
 //callback handlers
 void handle_foreground();
+void handle_minimize();
 void handle_movesize();
 void handle_namechange();
+void handle_destroy();
 
 
 //todo: use getClientRect + getWindowRect to figure out screen coordinates of windows with aero theme backgrounds enabled
@@ -221,6 +232,64 @@ Napi::Value printWindow(const Napi::CallbackInfo &info){
   return obj;
 }
 
+napi_value mapToJs(Napi::Env env, std::map<const std::string, int> *map){
+  Napi::Object obj = Napi::Object::New(env);
+  for(std::map<const std::string, int>::iterator it = map->begin(); it != map->end(); ++it){
+    obj.Set(Napi::String::New(env, it->first), Napi::Number::New(env, it->second));
+  }
+  return static_cast<napi_value>(obj);
+}
+
+void fnToJs(napi_env env, napi_value cb, void *context, void *voidMap){
+  std::map<const std::string, int> *map = static_cast<std::map<const std::string, int>*>(voidMap);
+  napi_value event = mapToJs(env, map);
+  napi_value global;
+  napi_status status = napi_get_global(env, &global);
+  NAPI_FATAL_IF_FAILED(status, "fnToJs", "napi_get_global");
+  status = napi_call_function(env, global, cb, 1, &event, NULL);
+  NAPI_FATAL_IF_FAILED(status, "FnToJs", "napi_call_function");
+  delete map;
+}
+
+void emit(std::map<const std::string, int> *map){
+  if(hook_info.fn == NULL)  return;
+  napi_status status = napi_call_threadsafe_function(hook_info.fn, static_cast<void*>(map), napi_tsfn_nonblocking);
+  if(status == napi_closing){
+    hook_info.fn = NULL;
+    delete map;
+  }
+}
+
+void handle_foreground(){
+  std::map<const std::string, int> *map = new std::map<const std::string, int>;
+  (*map)["type"] = 0;  
+  emit(map);
+}
+void handle_minimize(){
+  std::map<const std::string, int> *map = new std::map<const std::string, int>;
+  (*map)["type"] = 1;  
+  emit(map);
+}
+void handle_movesize(){
+  std::map<const std::string, int> *map = new std::map<const std::string, int>;
+  (*map)["type"] = 2;  
+  (*map)["x"] = 0;
+  (*map)["y"] = 0;
+  (*map)["w"] = 0;
+  (*map)["h"] = 0;
+
+  emit(map);
+}
+void handle_namechange(){
+  std::map<const std::string, int> *map = new std::map<const std::string, int>;
+  (*map)["type"] = 3;  
+  emit(map);
+}
+void handle_destroy(){
+  std::map<const std::string, int> *map = new std::map<const std::string, int>;
+  (*map)["type"] = 4;  
+  emit(map);
+}
 
 
 
@@ -228,33 +297,34 @@ Napi::Boolean init(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
   window_info *hook_info = static_cast<window_info*>(info.Data());
 
-  //get electron hwnd
-  if(info.Length() < 1 || info.Length() > 2) {
+  
+  if(info.Length() !=3) {
     Napi::TypeError::New(env, "Wrong number of arguments");
     return Napi::Boolean::New(env, false);
   }
-
+  
+  //get electron hwnd
   if(!info[0].IsNumber()){
     Napi::TypeError::New(env, "argument must be integer").ThrowAsJavaScriptException();
     return Napi::Boolean::New(env, false);
   }
-
-  if(info.Length() == 2){
-    if(!info[1].IsNumber()){
-      Napi::TypeError::New(env, "argument must be integer").ThrowAsJavaScriptException();
-      return Napi::Boolean::New(env, false);
-    }
-    hook_info->hwnd = (HWND)info[1].As<Napi::Number>().Int64Value();
-  } else {
-    hook_info->hwnd = GetForegroundWindow();
-  }
-
   hook_info->overlay_hwnd = (HWND)info[0].As<Napi::Number>().Int64Value();
 
-  /* hook_info->event_handle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-  uv_thread_t hook_tid;
-  uv_thread_create(&hook_tid, hook_thread, static_cast<void*>(hook_info));
-  WaitForSingleObject(hook_info->event_handle, INFINITE); */
+  if(!info[1].IsNumber()){
+    Napi::TypeError::New(env, "argument must be integer").ThrowAsJavaScriptException();
+    return Napi::Boolean::New(env, false);
+  }
+  hook_info->hwnd = (HWND)info[1].As<Napi::Number>().Int64Value();
+
+  if(!info[2].IsFunction()){
+    Napi::TypeError::New(env, "argument must be function").ThrowAsJavaScriptException();
+    return Napi::Boolean::New(env, false);
+  }
+
+  napi_value async_resource_name;
+  napi_create_string_utf8(env, "ehwnd", NAPI_AUTO_LENGTH, &async_resource_name);
+  Napi::Function fn = info[2].As<Napi::Function>();
+  napi_create_threadsafe_function(env, fn, NULL, async_resource_name, 0, 1, NULL, NULL, NULL, fnToJs, &hook_info->fn);
 
   return Napi::Boolean::New(env, true);
 }
@@ -280,25 +350,16 @@ Napi::Value setWindowNew(const Napi::CallbackInfo &info){
   return Napi::Boolean::New(env, true);
 }
 
-void handle_foreground(){
-  std::cout << "Window Foreground!" << std::endl;
-}
-void handle_movesize(){
-  std::cout << "Window Moved!" << std::endl;
-}
-void handle_namechange(){
-  std::cout << "namechange!?" << std::endl;
-}
-
 //handle hooks
 VOID CALLBACK hook_proc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD idEventThread, DWORD dwmsEventTime){
-  if(idObject != OBJID_WINDOW || idChild != CHILDID_SELF){
-    return;
-  }
+  if(idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
   
   switch(event){
     case EVENT_SYSTEM_FOREGROUND:
       handle_foreground();
+      break;
+    case EVENT_SYSTEM_MINIMIZEEND:
+      handle_minimize();
       break;
     case EVENT_OBJECT_LOCATIONCHANGE:
       handle_movesize();
@@ -306,14 +367,17 @@ VOID CALLBACK hook_proc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LON
     case EVENT_OBJECT_NAMECHANGE:
       handle_namechange();
       break;
+    case EVENT_OBJECT_DESTROY:
+      handle_destroy();
+      break;
   }
 }
 
 void set_global_hooks(window_info *hook_info){
-  hook_info->g_foreground_hook = (
+  hook_info->g_foreground_hook = SetWinEventHook(
     EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
     NULL, hook_proc, 0, 0, WINEVENT_OUTOFCONTEXT);
-  hook_info->g_minimize_hook = (
+  hook_info->g_minimize_hook = SetWinEventHook(
     EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZEEND,
     NULL, hook_proc, 0, 0, WINEVENT_OUTOFCONTEXT);
 }
@@ -325,11 +389,11 @@ void set_application_hooks(window_info *hook_info){
   hook_info->move_hook = SetWinEventHook(
     EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
     NULL, hook_proc, 0, threadId, WINEVENT_OUTOFCONTEXT);
-  hook_info->kill_hook = SetWinEventHook(
-    EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY,
-    NULL, hook_proc, 0, threadId, WINEVENT_OUTOFCONTEXT);
   hook_info->name_hook = SetWinEventHook(
     EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE,
+    NULL, hook_proc, 0, threadId, WINEVENT_OUTOFCONTEXT);
+  hook_info->kill_hook = SetWinEventHook(
+    EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY,
     NULL, hook_proc, 0, threadId, WINEVENT_OUTOFCONTEXT);
 }
 void unset_global_hooks(window_info *hook_info){
@@ -344,7 +408,6 @@ void unset_application_hooks(window_info *hook_info){
 
 //setup hooks
 void hook_thread(void* arg){
-
   window_info *hook_info = static_cast<window_info*>(arg);
   hook_info->threadId = GetCurrentThreadId();
   SetEvent(hook_info->event_handle);
@@ -361,18 +424,12 @@ void hook_thread(void* arg){
         unset_application_hooks(hook_info);
         break;
     }
-    /* TranslateMessage(&msg);
-    DispatchMessageW(&msg); */
   }
-
   unset_global_hooks(hook_info);
   unset_application_hooks(hook_info);
 }
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
-  
-  //create global hook info object
-  static window_info hook_info = {};
 
   //create api bindings
   exports.Set(Napi::String::New(env, "GetWindowText"),
@@ -391,7 +448,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     Napi::Function::New(env, printWindow));
 
   exports.Set(Napi::String::New(env, "init"),
-    Napi::Function::New(env, init, nullptr, static_cast<void*>(&hook_info))); //not getting correct &hook_info addr?...
+    Napi::Function::New(env, init, nullptr, static_cast<void*>(&hook_info)));
     
   exports.Set(Napi::String::New(env, "SetWatchWindow"),
     Napi::Function::New(env, setWindowNew, nullptr, static_cast<void*>(&hook_info)));
