@@ -1,6 +1,6 @@
 'use strict'
 
-import { app, protocol, BrowserWindow, ipcMain } from 'electron'
+import { app, protocol, BrowserWindow, ipcMain, globalShortcut } from 'electron'
 import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
 import installExtension, { VUEJS_DEVTOOLS } from 'electron-devtools-installer'
 import path from 'path'
@@ -27,6 +27,9 @@ const globalShare = {
   ehwnd: null,
   appInspect: null,
   makeNewWindowSelectable: null,
+  setInteractable: null,
+  setOverlayState: null,
+  updateOverlayState: null,
   emitter: new EventEmitter(),
   addon: addon,
 };
@@ -37,9 +40,6 @@ ipcMain.handle('getGlobal', (event, payload) => {
     return globalShare[attr](...rest);
   else
     globalShare[attr];
-});
-globalShare.emitter.on('move', (event)=>{
-  console.log(event);
 });
 
 async function createWindow() {
@@ -54,61 +54,83 @@ async function createWindow() {
       contextIsolation: true,
       enableRemoteModule: false,
       preload: path.join(__dirname, 'preload.js'),
-    }
+    },
+    fullscreenable: true,
+    //skipTaskbar: true,
+    resizable: true,
+    //show: false,
   });
-  //globalShare.win.setIgnoreMouseEvents(true);
-  globalShare.win.webContents.openDevTools();
+  
+  
 
   globalShare.win.webContents.on('did-finish-load', () => {
-
+    //globalShare.win.webContents.openDevTools();
+    
+    //setup handles
     globalShare.ehwnd = globalShare.win.webContents.getOSProcessId();
     globalShare.hwnd = addon.GetForegroundWindow();
-    let selectNewWindow = true;
 
-    //window handlers  
-    globalShare.win.on('blur', e => {
-      if(selectNewWindow){
-        let fhwnd = addon.GetForegroundWindow();
-        if(fhwnd != 0 && fhwnd != globalShare.ehwnd){
-          globalShare.hwnd = fhwnd;
-          addon.SetWatchWindow(globalShare.hwnd);
-        }
-      }
-      if(globalShare.hwnd)  selectNewWindow = false;
-    });
-    globalShare.win.on('focus', e => {
-      showWindow();
-      globalShare.win.webContents.send('focus', globalShare.hwnd);
-    });
-    globalShare.win.on('minimize', e => hideWindow());
-    globalShare.win.on('restore', e => showWindow());
-    
-    globalShare.makeNewWindowSelectable = () => {
-      selectNewWindow = true;
-    }
-  
+    //init addon/appInspect
+    addon.init(globalShare.ehwnd, globalShare.hwnd, function(e){
+      const callbackHandles = ['focus', 'unminimize', 'move', 'nameChange', 'destroy'];
+      const type = callbackHandles[e['type']];
+      if(type)  delete e['type'];
+      globalShare.emitter.emit(type, e);
+    }.bind(this));
+    globalShare.appInspect = new appInspect(globalShare.ehwnd, globalShare.hwnd);
+
+    //local variables
+    let overlayState = false;
+    let interactable = true;
+    let selectNewWindow = true;
     
     //helper functions
-    function showWindow(){
-      let rect;
-      if(globalShare.hwnd){
-        rect = addon.GetWindowRect(globalShare.hwnd);
-      } else {
-        rect = { left: 0, top: 0, right: 800, bottom: 600 };
+    function updateOverlay(){
+      if(!overlayState){
+        globalShare.win.setIgnoreMouseEvents(!interactable);
+        globalShare.win.show();
+        addon.SetForegroundWindow(globalShare.ehwnd);
+      }else{
+        globalShare.win.setIgnoreMouseEvents(true);
+        addon.SetForegroundWindow(globalShare.hwnd);
       }
-      globalShare.win.setPosition(rect.left, rect.top, false);
-      globalShare.win.setSize(rect.right-rect.left, rect.bottom-rect.top, false);
-      globalShare.win.show();
     }
-    function hideWindow(){
-      globalShare.win.minimize();
-    }
+    updateOverlay();
+    globalShortcut.register('CmdOrCtrl + H', () => { updateOverlay(); overlayState = !overlayState; });
 
-    globalShare.appInspect = new appInspect(globalShare.ehwnd, globalShare.hwnd);
+
+    //globalShare functions
+    globalShare.makeNewWindowSelectable = () => {
+      selectNewWindow = true;
+    };
+    globalShortcut.setInteractable = e => {
+      if(e) interactable = e;
+      return interactable;
+    };
+    globalShortcut.setOverlayState = e => {
+      if(e) overlayState = e;
+      return overlayState;
+    };
+    globalShortcut.updateOverlay = () => updateOverlay();
+
+
+    //emmitter callbacks
+    globalShare.emitter.on("focus", (e) => {
+      if(e.hwnd == globalShare.ehwnd){
+        globalShare.win.webContents.send('focus', globalShare.hwnd);
+      } else if(selectNewWindow && e.hwnd != 0){
+        globalShare.hwnd = e.hwnd;
+        addon.SetWatchWindow(globalShare.hwnd);
+        selectNewWindow = false;
+      }
+    });
+    globalShare.emitter.on("move", (e) => {
+      globalShare.win.setBounds({x: e.x, y: e.y, width: e.w, height: e.h});
+      addon.SetForegroundWindow(ehwnd);
+    });
+
+    
   });
-
-  
-
   
 
 
