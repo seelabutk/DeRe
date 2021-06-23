@@ -6,6 +6,7 @@ import installExtension, { VUEJS_DEVTOOLS } from 'electron-devtools-installer'
 import path from 'path'
 //import fs from 'fs'
 import { EventEmitter } from 'events'
+import os from 'os'
 
 const appInspect = require('./appInspect');
 const addon = __non_webpack_require__('../../addon/main');
@@ -55,7 +56,7 @@ async function createWindow() {
       enableRemoteModule: false,
       preload: path.join(__dirname, 'preload.js'),
     },
-    fullscreenable: true,
+    fullscreenable: false,
     //skipTaskbar: true,
     resizable: true,
     //show: false,
@@ -67,7 +68,9 @@ async function createWindow() {
     //globalShare.win.webContents.openDevTools();
     
     //setup handles
-    globalShare.ehwnd = globalShare.win.webContents.getOSProcessId();
+    //globalShare.ehwnd = globalShare.win.webContents.getOSProcessId();
+    const hbuf = globalShare.win.getNativeWindowHandle();
+    globalShare.ehwnd = os.endianness == "LE" ? hbuf.readInt32LE() : hbuf.readInt32BE();
     globalShare.hwnd = addon.GetForegroundWindow();
 
     //init addon/appInspect
@@ -81,37 +84,40 @@ async function createWindow() {
 
     //local variables
     let overlayState = false;
-    let interactable = true;
+    let interactable = false;
     let selectNewWindow = true;
     
     //helper functions
     function updateOverlay(){
-      if(!overlayState){
+      if(overlayState){
         globalShare.win.setIgnoreMouseEvents(!interactable);
         globalShare.win.show();
         addon.SetForegroundWindow(globalShare.ehwnd);
       }else{
+        globalShare.win.minimize();
         globalShare.win.setIgnoreMouseEvents(true);
         addon.SetForegroundWindow(globalShare.hwnd);
       }
     }
     updateOverlay();
-    globalShortcut.register('CmdOrCtrl + H', () => { updateOverlay(); overlayState = !overlayState; });
+
+    globalShortcut.register('CmdOrCtrl + H', () => { overlayState = !overlayState; updateOverlay(); });
+    globalShortcut.register('CmdOrCtrl + I', () => { interactable = !interactable; overlayState = true; updateOverlay(); })
 
 
     //globalShare functions
     globalShare.makeNewWindowSelectable = () => {
       selectNewWindow = true;
     };
-    globalShortcut.setInteractable = e => {
+    globalShare.setInteractable = e => {
       if(e) interactable = e;
       return interactable;
     };
-    globalShortcut.setOverlayState = e => {
+    globalShare.setOverlayState = e => {
       if(e) overlayState = e;
       return overlayState;
     };
-    globalShortcut.updateOverlay = () => updateOverlay();
+    globalShare.updateOverlay = () => updateOverlay();
 
 
     //emmitter callbacks
@@ -121,6 +127,9 @@ async function createWindow() {
       } else if(selectNewWindow && e.hwnd != 0){
         globalShare.hwnd = e.hwnd;
         addon.SetWatchWindow(globalShare.hwnd);
+        const rect = addon.GetClientWindowRect(globalShare.hwnd);
+        globalShare.win.setBounds({x: rect.left, y: rect.top, width: rect.right-rect.left, height: rect.bottom-rect.top});
+
         selectNewWindow = false;
       }
     });

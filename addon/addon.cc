@@ -7,6 +7,7 @@
 #include <napi.h>
 
 #include <windows.h>
+#include <strsafe.h>
 
 //TODO: support more than just ints for event communication types
 //figure out how to overlay window permanantly, even when moving target window
@@ -99,9 +100,7 @@ Napi::Value setForegroundWindow(const Napi::CallbackInfo &info){
     return env.Null();
   }
   HWND hwnd = (HWND)info[0].As<Napi::Number>().Int64Value();
-
   SetForegroundWindow(hwnd);
-
   return Napi::Boolean::New(env, true);
 }
 
@@ -335,14 +334,6 @@ void handle_movesize(){
   (*map)["w"] = rect.right - rect.left;
   (*map)["h"] = rect.bottom - rect.top;
   emit(map);
-  //for windows: set electron window to be topmost
-  {
-    //while(GetForegroundWindow() != hook_info.overlay_hwnd){
-      SetWindowPos(hook_info.hwnd, hook_info.overlay_hwnd, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-      SetWindowPos(hook_info.overlay_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-      SetForegroundWindow(hook_info.overlay_hwnd);
-    //}
-  }
 }
 void handle_namechange(){
   std::map<const std::string, int> *map = new std::map<const std::string, int>;
@@ -384,6 +375,11 @@ Napi::Boolean init(const Napi::CallbackInfo &info) {
   napi_create_string_utf8(env, "ehwnd", NAPI_AUTO_LENGTH, &async_resource_name);
   Napi::Function fn = info[2].As<Napi::Function>();
   napi_create_threadsafe_function(env, fn, NULL, async_resource_name, 0, 1, NULL, NULL, NULL, fnToJs, &hook_info->fn);
+
+  hook_info->event_handle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+  uv_thread_t hook_tid;
+  uv_thread_create(&hook_tid, hook_thread, static_cast<void*>(hook_info));
+  WaitForSingleObject(hook_info->event_handle, INFINITE);
 
   return Napi::Boolean::New(env, true);
 }
@@ -441,8 +437,7 @@ void set_global_hooks(window_info *hook_info){
     NULL, hook_proc, 0, 0, WINEVENT_OUTOFCONTEXT);
 }
 void set_application_hooks(window_info *hook_info){
-  DWORD pid;
-  DWORD threadId = GetWindowThreadProcessId(hook_info->hwnd, &pid);
+  DWORD threadId = GetWindowThreadProcessId(hook_info->hwnd, NULL);
   if(threadId == 0) return;
   
   hook_info->move_hook = SetWinEventHook(
@@ -472,13 +467,7 @@ void hook_thread(void* arg){
   hook_info->threadId = GetCurrentThreadId();
   SetEvent(hook_info->event_handle);
   set_global_hooks(hook_info);
-
-  SetLastError(0);
-  SetParent(hook_info->hwnd, hook_info->overlay_hwnd);
-  AttachThreadInput(hook_info->threadId, GetWindowThreadProcessId(hook_info->overlay_hwnd, NULL), FALSE);
-
-  SetWindowPos(hook_info->overlay_hwnd, hook_info->hwnd, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-  SetWindowPos(hook_info->overlay_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+  SetWindowPos(hook_info->overlay_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_ASYNCWINDOWPOS | SWP_NOMOVE | SWP_NOSIZE);
   
   MSG msg;
   while(GetMessageW(&msg, (HWND)NULL, 0, 0) != FALSE){
@@ -488,10 +477,6 @@ void hook_thread(void* arg){
         break;
       case UNHOOK_EVENT:
         unset_application_hooks(hook_info);
-        break;
-      default:
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
         break;
     }
   }
@@ -528,11 +513,6 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     
   exports.Set(Napi::String::New(env, "SetWatchWindow"),
     Napi::Function::New(env, setWindowNew, nullptr, static_cast<void*>(&hook_info)));
-
-  hook_info.event_handle = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-  uv_thread_t hook_tid;
-  uv_thread_create(&hook_tid, hook_thread, static_cast<void*>(&hook_info));
-  WaitForSingleObject(hook_info.event_handle, INFINITE);
 
   return exports;
 }
