@@ -4,7 +4,7 @@
       :items="items"
     />
     <loom2
-      directory="/apps/nytimes"
+      directory="/apps/tableau"
       :shortcuts="items"
       @add-shortcut="items = items.concat($event)"
     />

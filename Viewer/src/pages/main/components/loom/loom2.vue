@@ -19,10 +19,11 @@
       :style="styleSize" 
       :class="{'hide': !hintHelpState}"
     />
-
-    <loomTarget 
+    
+    <component 
       v-for="target in currentTargets"
       :key="target.id" 
+      :is="getComponent(target)" 
       :ref="'target' + target.id"
       :targetData="target"
       :showHint="hintHelpState"
@@ -77,7 +78,9 @@
 import videojs from 'video.js'
 import 'video.js/dist/video-js.min.css'
 import Fuse from 'fuse.js'
-import loomTarget from './loomTarget.vue'
+
+import brushingBox from './loomComponents/brushingBox.vue'
+import loomTarget from './loomComponents/loomTarget.vue'
 
 //todo: make custom video test all actors/types one by one
 //todo: brushing backwards
@@ -150,6 +153,13 @@ export default {
   },
 
   methods: {
+
+    getComponent: function(target){
+      switch(target.type){
+        case "brush": return brushingBox;
+        default: return loomTarget;
+      }
+    },
 
     setupVideo(element){
       let self = this;

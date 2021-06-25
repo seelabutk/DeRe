@@ -66,9 +66,7 @@ async function createWindow() {
 
   globalShare.win.webContents.on('did-finish-load', () => {
     //globalShare.win.webContents.openDevTools();
-    
     //setup handles
-    //globalShare.ehwnd = globalShare.win.webContents.getOSProcessId();
     const hbuf = globalShare.win.getNativeWindowHandle();
     globalShare.ehwnd = os.endianness == "LE" ? hbuf.readInt32LE() : hbuf.readInt32BE();
     globalShare.hwnd = addon.GetForegroundWindow();
@@ -101,8 +99,16 @@ async function createWindow() {
     }
     updateOverlay();
 
-    globalShortcut.register('CmdOrCtrl + H', () => { overlayState = !overlayState; updateOverlay(); });
-    globalShortcut.register('CmdOrCtrl + I', () => { interactable = !interactable; overlayState = true; updateOverlay(); })
+    globalShortcut.register('CmdOrCtrl + H', () => { 
+      overlayState = !overlayState; 
+      if(!overlayState)  interactable = false;
+      updateOverlay(); 
+    });
+    globalShortcut.register('CmdOrCtrl + I', () => {
+      interactable = !interactable; 
+      if(interactable) overlayState = true; 
+      updateOverlay(); 
+    })
 
 
     //globalShare functions
@@ -129,7 +135,6 @@ async function createWindow() {
         addon.SetWatchWindow(globalShare.hwnd);
         const rect = addon.GetClientWindowRect(globalShare.hwnd);
         globalShare.win.setBounds({x: rect.left, y: rect.top, width: rect.right-rect.left, height: rect.bottom-rect.top});
-
         selectNewWindow = false;
       }
     });
