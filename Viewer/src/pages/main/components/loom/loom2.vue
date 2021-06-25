@@ -33,8 +33,14 @@
     
 
     <div id="loom-menu" :style="loomMenuStyle">
-
       <span class="title">Loom</span>
+
+      <span class="text">Mode</span>
+      <select name="device" ref="renderMode" @change="onDeviceChange">
+        <option value="desktop">Desktop</option>
+        <option value="mobile">Mobile</option>
+      </select>
+
       <span class="text">Hints:</span>
       <input 
         @click="toggleHintHelp"
@@ -79,7 +85,10 @@ import videojs from 'video.js'
 import 'video.js/dist/video-js.min.css'
 import Fuse from 'fuse.js'
 
+import transformMode from './transforms.js'
+
 import brushingBox from './loomComponents/brushingBox.vue'
+import loomButton from './loomComponents/loomButton.vue'
 import loomTarget from './loomComponents/loomTarget.vue'
 
 //todo: make custom video test all actors/types one by one
@@ -90,6 +99,8 @@ export default {
   name: 'Loom2',
   components: {
     loomTarget,
+    loomButton,
+    brushingBox,
   },
   props: {
     directory: {
@@ -115,6 +126,7 @@ export default {
     current_state: null,
     targets: {},
     interactionHistory: [],
+    renderMode: null,
     maxHistoryLength: 100,
     fps: 30,
     lastFrame: 0,
@@ -122,6 +134,7 @@ export default {
     hintHelpState: false,
     searchResults: [],
     confidence: 5,
+    transformedTargetCache: {},
   }),
 
   computed: {
@@ -156,6 +169,7 @@ export default {
 
     getComponent: function(target){
       switch(target.type){
+        case 'button': return loomButton;
         case "brush": return brushingBox;
         default: return loomTarget;
       }
@@ -180,24 +194,32 @@ export default {
     },
 
     load(){
-        return fetch(this.directory + '/' + this.config_filename)
-            .then(response => response.text())
-            .then(config => JSON.parse(config))
-            .then(config => this.init(config));
+      return fetch(this.directory + '/' + this.config_filename)
+        .then(response => response.text())
+        .then(config => JSON.parse(config))
+        .then(config => {
+          this.config = config
+          return this.config;
+        });
     },
 
     init(config){
-      this.config = config;
-      this.current_state = this.config;
-      this.traverse(this.config);
+      this.current_state = config;
+      const targets = this.traverse(config);
+      this.targets = targets;
       this.drawMiniMap();
+      this.current_state = this.targets[1];
+      this.changeState(this.current_state);
+      return targets;
     },
 
     traverse(target){
-      if(target.name != "root") this.targets[target.frame_no] = target;
+      let targets = {};
+      if(target.name != "root") targets[target.frame_no] = target;
       target.hasOwnProperty('children') && target.children.forEach(child => {
-        this.traverse(child);
+        targets = {...targets, ...this.traverse(child)};
       });
+      return targets;
     },
 
     updateInteractionHistory(target, e){
@@ -279,8 +301,6 @@ export default {
     }, 
 
     changeStateWithFrameNo(frame, offset = 0){
-        // console.log("Frame", frame);
-
         let target = this.targets[frame];
         if ( this.findChild(target, this.current_state) != null ||
           this.findSibling(target, this.current_state) != null ||
@@ -409,16 +429,25 @@ export default {
       if(targetComponent) targetComponent.highlight();
     },
 
-  },
-  created(){
-    window.vue = this;
-    this.load().then(() => {
-      this.current_state = this.targets[1];
-      this.changeState(this.current_state);
-    });
-    this.emitter.on("changeState", this.changeState);
+    onDeviceChange(event){
+      this.renderMode = event.target.value;
+      if(this.transformedTargetCache.hasOwnProperty(this.renderMode)){
+        this.targets = this.transformedTargetCache[this.renderMode];
+      } else {
+        const configCopy = JSON.parse(JSON.stringify(this.config))
+        this.transformedTargetCache[this.renderMode] = this.init(transformMode(configCopy, this.renderMode));
+      }
+    },
+
   },
   mounted(){
+    window.vue = this;
+
+    this.renderMode = this.$refs.renderMode.value;
+    this.load().then(config => {
+      this.transformedTargetCache[this.renderMode] = this.init(transformMode(config, this.renderMode));
+    });
+    this.emitter.on("changeState", this.changeState);
     this.player = this.setupVideo(this.$refs.videoPlayer);
   },
   beforeUnmount(){
@@ -522,6 +551,7 @@ export default {
 
   span.text{
     display: inline-block;
+    margin-top: 20px;
     margin-right: 10px;
     vertical-align: middle;
     color: #eee;
