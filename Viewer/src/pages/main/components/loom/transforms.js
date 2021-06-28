@@ -26,6 +26,14 @@
     }
 */
 
+function getFrameData(canvas, video, frame){
+  const context = canvas.getContext('2d');
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  console.log(canvas.width, canvas.height);
+  const data = canvas.toDataURL();
+  return data;
+}
+
 function boundsToCircle(dims){
   const radius = (dims.max_x - dims.min_x)/2;
   const sides = Math.max(Math.ceil(Math.pow(radius, 2/3)), 5);
@@ -45,27 +53,37 @@ function boundsToCircle(dims){
   return [points, newDims];
 }
 
-function traverseMobile(config){
+function traverseMobile(config, canvas, video){
 
   if(config.name !== "root"){
+
+    //const img = getFrameData(canvas, video, config.frame_no);
     //modify current level
-    if(config.actor == "button"){
+    const actors = ["button", "hover"];
+    if(actors.includes(config.actor) && config.shape.points.length == 4){
       [config.shape.points, config.shape.dimensions] = boundsToCircle(config.shape.dimensions);
     }
 
   }
 
   config.hasOwnProperty('children') && config.children.forEach(child => {
-    traverseMobile(child);
+    traverseMobile(child, canvas, video);
   });
 }
 
 // note: since we're working with objects, values will be copied by REFERENCE,
 // not by value, so no return values are needed in the traversal functions
-export default function(config, mode){
+export default function(config, mode, video){
+
+  const canvas = document.createElement('canvas');
+  canvas.width = config.window.width;
+  canvas.height = config.window.height;
+
   switch(mode){
     case 'mobile':
-      traverseMobile(config);
+      traverseMobile(config, canvas, video);
+      break;
+    case 'desktop': //no traversal necessary, app already in desktop mode
       break;
     default:
       break; 

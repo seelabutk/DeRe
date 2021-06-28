@@ -195,7 +195,13 @@ def main(ifile, ofile):
             iconfig['version'] = '0.0.3'
             
         if iconfig['version'] == '0.0.3':
-            print("latest version")
+            iconfig['mode'] = 'desktop'
+            iconfig['version'] = '0.0.4'
+            iconfig = {'desktop': iconfig}
+            iconfig['version'] = '0.0.4'
+        
+        if iconfig['version'] == '0.0.4':
+            print('current version')
 
     with open(ofile, 'w') as fout:
         json.dump(iconfig, fout)

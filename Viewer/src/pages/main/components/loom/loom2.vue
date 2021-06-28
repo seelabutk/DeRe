@@ -2,8 +2,8 @@
   <div 
     id="loom"
     :style="{
-      height: config ? config.window.height + 'px' : '0px',
-      width:  config ? config.window.width + loomMenuWidth + 'px' : '0px',
+      height: currentConfig ? currentConfig.window.height + 'px' : '0px',
+      width:  currentConfig ? currentConfig.window.width + loomMenuWidth + 'px' : '0px',
     }"
   >
 
@@ -123,6 +123,7 @@ export default {
   data: () => ({
     player: null,
     config: null,
+    currentConfig: null,
     current_state: null,
     targets: {},
     interactionHistory: [],
@@ -143,17 +144,17 @@ export default {
         position: 'absolute',
         top: '0px',
         left: '0px',
-        width:  this.config ? this.config.window.width  + 'px' : '0px',
-        height: this.config ? this.config.window.height + 'px' : '0px',
+        width:  this.currentConfig ? this.currentConfig.window.width  + 'px' : '0px',
+        height: this.currentConfig ? this.currentConfig.window.height + 'px' : '0px',
       };
     },
     loomMenuStyle: function(){
       return {
         position: 'absolute',
         width: this.loomMenuWidth,
-        height: this.config ? this.config.window.height + 'px' : '0px',
+        height: this.currentConfig ? this.currentConfig.window.height + 'px' : '0px',
         top: '0px',
-        left: this.config ? this.config.window.width  + 'px' : '0px',
+        left: this.currentConfig ? this.currentConfig.window.width  + 'px' : '0px',
       };
     },
     currentTargets: function(){
@@ -176,7 +177,7 @@ export default {
     },
 
     setupVideo(element){
-      let self = this;
+
       let videoOptions = {
         sources: [{
           src: this.directory + '/' + this.video_filename,
@@ -198,19 +199,29 @@ export default {
         .then(response => response.text())
         .then(config => JSON.parse(config))
         .then(config => {
+          
+          if(config['version'] != '0.0.4'){
+            console.error('ERROR, out of version config file, run Recorder/convert.py');
+            return;
+          }
+
           this.config = config
-          return this.config;
+          Object.keys(config).forEach(key => {  
+            if(key == 'version')  return;
+            this.transformedTargetCache[key] = this.traverse(JSON.parse(JSON.stringify(config[key])));
+          });
+
         });
     },
 
-    init(config){
-      this.current_state = config;
-      const targets = this.traverse(config);
-      this.targets = targets;
-      this.drawMiniMap();
+    init(mode){
+      this.cacheModeChange(mode);
+      this.currentConfig = this.config[mode];
+      this.targets = this.transformedTargetCache[mode];
       this.current_state = this.targets[1];
       this.changeState(this.current_state);
-      return targets;
+      this.drawMiniMap();
+      return this.targets;
     },
 
     traverse(target){
@@ -297,31 +308,31 @@ export default {
     },
     
     changeState(target, offset = 0){
-        this.changeStateWithFrameNo(target.frame_no, offset);
+      this.changeStateWithFrameNo(target.frame_no, offset);
     }, 
 
     changeStateWithFrameNo(frame, offset = 0){
-        let target = this.targets[frame];
-        if ( this.findChild(target, this.current_state) != null ||
-          this.findSibling(target, this.current_state) != null ||
-          this.findChild(target, this.config) != null ||
-          target.name == "root"
-        ) {
-          this.current_state = target;
-          let actualFrame = frame + 1 + offset;
-          if(this.lastFrame != actualFrame) {
-            this.player.currentTime((frame + 1 + offset) / this.fps);
-            this.lastFrame = actualFrame;
-          }
+      let target = this.targets[frame];
+      if ( this.findChild(target, this.current_state) != null ||
+        this.findSibling(target, this.current_state) != null ||
+        this.findChild(target, this.currentConfig) != null ||
+        target.name == "root"
+      ) {
+        this.current_state = target;
+        let actualFrame = frame + 1 + offset;
+        if(this.lastFrame != actualFrame) {
+          this.player.currentTime((frame + 1 + offset) / this.fps);
+          this.lastFrame = actualFrame;
         }
-        this.drawMiniMap();
+      }
+      this.drawMiniMap();
     },
 
     drawMiniMap(){
       let canvas = this.$refs.miniMap;
       let width = this.loomMenuWidth - 20;
-      let ratio = 1.0 * width / this.config.window.width;
-      let height = this.config.window.height * ratio;
+      let ratio = 1.0 * width / this.currentConfig.window.width;
+      let height = this.currentConfig.window.height * ratio;
 
       canvas.width = width;
       canvas.height = height;
@@ -335,7 +346,7 @@ export default {
       context.fillStyle = "#aaaaaa";
       for (var i in this.targets){
         var target = this.targets[i];
-        
+
         if (this.findChild(target, this.current_state) == null &&
           this.findSibling(target, this.current_state) == null &&
           target.parent != "root")  continue;
@@ -370,7 +381,7 @@ export default {
 
     // tries to find a target state (needle) in the siblings of another (other) based on its frame number
     findSibling(needle, other){
-        let par = (other.parent == "root" ? this.config : this.findByName(other.parent)); 
+        let par = (other.parent == "root" ? this.currentConfig : this.findByName(other.parent)); 
         if (par == null || !par.hasOwnProperty("children")) return null;
         for (var i = 0; i < par.children.length; i++)
           if (par.children[i].frame_no == needle.frame_no)
@@ -417,7 +428,7 @@ export default {
 
       if(target) {
         if(target.parent == "root") {
-          this.current_state = this.config;
+          this.current_state = this.currentConfig;
           this.player.currentTime(1/this.fps);
         } else {
           let parent = this.findByName(target.parent);
@@ -429,14 +440,17 @@ export default {
       if(targetComponent) targetComponent.highlight();
     },
 
+    cacheModeChange(mode){
+      if(!this.config.hasOwnProperty(mode)){
+        const configCopy = JSON.parse(JSON.stringify(this.currentConfig));
+        this.config[mode] = transformMode(configCopy, mode, this.player);
+        this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
+      }
+    },
+
     onDeviceChange(event){
       this.renderMode = event.target.value;
-      if(this.transformedTargetCache.hasOwnProperty(this.renderMode)){
-        this.targets = this.transformedTargetCache[this.renderMode];
-      } else {
-        const configCopy = JSON.parse(JSON.stringify(this.config))
-        this.transformedTargetCache[this.renderMode] = this.init(transformMode(configCopy, this.renderMode));
-      }
+      this.init(this.renderMode);
     },
 
   },
@@ -444,11 +458,12 @@ export default {
     window.vue = this;
 
     this.renderMode = this.$refs.renderMode.value;
-    this.load().then(config => {
-      this.transformedTargetCache[this.renderMode] = this.init(transformMode(config, this.renderMode));
+    this.load().then(() => {
+      this.player = this.setupVideo(this.$refs.videoPlayer);
+      this.init(this.renderMode);
+      this.emitter.on("changeState", this.changeState);
     });
-    this.emitter.on("changeState", this.changeState);
-    this.player = this.setupVideo(this.$refs.videoPlayer);
+    
   },
   beforeUnmount(){
     if (this.player) this.player.dispose();
