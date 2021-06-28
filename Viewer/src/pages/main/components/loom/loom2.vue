@@ -90,10 +90,9 @@ import transformMode from './transforms.js'
 import brushingBox from './loomComponents/brushingBox.vue'
 import loomButton from './loomComponents/loomButton.vue'
 import loomTarget from './loomComponents/loomTarget.vue'
+import loomHover from './loomComponents/loomHover.vue'
 
-//todo: make custom video test all actors/types one by one
 //todo: brushing backwards
-//what is linear? what is parallel? 
 
 export default {
   name: 'Loom2',
@@ -169,10 +168,11 @@ export default {
   methods: {
 
     getComponent: function(target){
-      switch(target.type){
+      switch(target.actor){
+        case 'hover': return loomHover;
         case 'button': return loomButton;
         case "brush": return brushingBox;
-        default: return loomTarget;
+        default: return undefined;
       }
     },
 

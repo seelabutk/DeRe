@@ -23,7 +23,7 @@ export default {
   mixins: [loomBase],
 
   mounted: function(){
-    this.eventData['click'] = function(e) {
+    this.eventData['mouseover'] = function(e) {
       this.$emit('changeState', this.targetData);
       this.$emit('addHistory', this.targetData, e)
     }.bind(this);
