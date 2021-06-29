@@ -91,8 +91,11 @@ import brushingBox from './loomComponents/brushingBox.vue'
 import loomButton from './loomComponents/loomButton.vue'
 import loomTarget from './loomComponents/loomTarget.vue'
 import loomHover from './loomComponents/loomHover.vue'
+import dropdown from './loomComponents/dropdown.vue'
 
 //todo: brushing backwards
+//todo: multiple current_states for more complicated hiearchies?
+//todo: make more robust loom object class?
 
 export default {
   name: 'Loom2',
@@ -125,6 +128,7 @@ export default {
     currentConfig: null,
     current_state: null,
     targets: {},
+    targetCount: 0,
     interactionHistory: [],
     renderMode: null,
     maxHistoryLength: 100,
@@ -158,9 +162,9 @@ export default {
     },
     currentTargets: function(){
       return Object.values(this.targets).filter(target => 
-        !(this.findChild(target, this.current_state) == null &&
-        this.findSibling(target, this.current_state) == null &&
-        target.parent != "root")
+        (this.findChild(target, this.current_state) != null ||
+        this.findSibling(target, this.current_state) != null ||
+        target.parent == 'root') && target.hide != true
       );
     },
   },
@@ -169,9 +173,10 @@ export default {
 
     getComponent: function(target){
       switch(target.actor){
-        case 'hover': return loomHover;
+        case 'hover': return this.renderMode == 'mobile' ? loomButton : loomHover;
         case 'button': return loomButton;
         case "brush": return brushingBox;
+        case "dropdown": return dropdown;
         default: return undefined;
       }
     },
@@ -193,12 +198,24 @@ export default {
         });
       });
     },
-
+    parentify(config){
+      config.children.forEach(child => {
+        child.parent_id = config.id;
+        if(child.hasOwnProperty('children') && child.children.length > 0) this.parentify(child);
+      });      
+      return config;
+    },
     load(){
       return fetch(this.directory + '/' + this.config_filename)
         .then(response => response.text())
         .then(config => JSON.parse(config))
         .then(config => {
+          Object.keys(config).forEach(key => {
+            if(key == 'version')  return;
+            config[key] = this.parentify(config[key]);
+          });
+          return config
+        }).then(config => {
           
           if(config['version'] != '0.0.4'){
             console.error('ERROR, out of version config file, run Recorder/convert.py');
@@ -206,11 +223,8 @@ export default {
           }
 
           this.config = config
-          Object.keys(config).forEach(key => {  
-            if(key == 'version')  return;
-            this.transformedTargetCache[key] = this.traverse(JSON.parse(JSON.stringify(config[key])));
-          });
-
+          this.currentConfig = this.config[this.renderMode];
+          this.cacheModeChange(this.renderMode);
         });
     },
 
@@ -221,12 +235,15 @@ export default {
       this.current_state = this.targets[1];
       this.changeState(this.current_state);
       this.drawMiniMap();
-      return this.targets;
     },
 
     traverse(target){
       let targets = {};
-      if(target.name != "root") targets[target.frame_no] = target;
+      if(target.name != "root") {
+        if(target.frame_no == -1) target.frame_no = 'frameless_' + this.targetCount;
+        targets[target.frame_no] = target;
+        ++this.targetCount;
+      }
       target.hasOwnProperty('children') && target.children.forEach(child => {
         targets = {...targets, ...this.traverse(child)};
       });
@@ -347,11 +364,13 @@ export default {
       for (var i in this.targets){
         var target = this.targets[i];
 
+        if(target.hide) continue;
+
         if (this.findChild(target, this.current_state) == null &&
           this.findSibling(target, this.current_state) == null &&
           target.parent != "root")  continue;
 
-        if (target.shape.type != "poly")  throw("Error, non-poly shape, run convert script");
+        if (target.shape.type != "poly")  continue;
 
         context.beginPath();
         context.moveTo(target.shape.points[0].x * ratio, target.shape.points[0].y * ratio);
@@ -441,16 +460,20 @@ export default {
     },
 
     cacheModeChange(mode){
-      if(!this.config.hasOwnProperty(mode)){
+      if(!this.transformedTargetCache.hasOwnProperty(mode)){
         const configCopy = JSON.parse(JSON.stringify(this.currentConfig));
-        this.config[mode] = transformMode(configCopy, mode, this.player);
+        if(!this.config.hasOwnProperty(mode))
+          this.config[mode] = transformMode(configCopy, this.config['desktop'], mode, this.player); //assume desktop is original mode
+        this.targetCount = 0;
         this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
+        this.transformedTargetCache[mode][0] = this.config[mode];
       }
     },
 
     onDeviceChange(event){
-      this.renderMode = event.target.value;
-      this.init(this.renderMode);
+      const mode = event.target.value;
+      this.init(mode);
+      this.renderMode = mode
     },
 
   },
