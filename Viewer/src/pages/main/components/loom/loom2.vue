@@ -81,17 +81,20 @@
 </template>
 
 <script>
+
+import loomConfig from './loomConfig.json'
+
 import videojs from 'video.js'
 import 'video.js/dist/video-js.min.css'
 import Fuse from 'fuse.js'
 
 import transformMode from './transforms.js'
 
-import brushingBox from './loomComponents/brushingBox.vue'
+import loomBrushingBox from './loomComponents/loomBrushingBox.vue'
 import loomButton from './loomComponents/loomButton.vue'
 import loomTarget from './loomComponents/loomTarget.vue'
 import loomHover from './loomComponents/loomHover.vue'
-import dropdown from './loomComponents/dropdown.vue'
+import loomDropdown from './loomComponents/loomDropdown.vue'
 
 //todo: brushing backwards
 //todo: multiple current_states for more complicated hiearchies?
@@ -102,7 +105,9 @@ export default {
   components: {
     loomTarget,
     loomButton,
-    brushingBox,
+    loomHover,
+    loomDropdown,
+    loomBrushingBox,
   },
   props: {
     directory: {
@@ -123,6 +128,7 @@ export default {
   },
 
   data: () => ({
+    loomConfig: null,
     player: null,
     config: null,
     currentConfig: null,
@@ -172,13 +178,18 @@ export default {
   methods: {
 
     getComponent: function(target){
-      switch(target.actor){
-        case 'hover': return this.renderMode == 'mobile' ? loomButton : loomHover;
-        case 'button': return loomButton;
-        case "brush": return brushingBox;
-        case "dropdown": return dropdown;
-        default: return undefined;
+      const loomObjectName = "loom" + target.actor.charAt(0).toUpperCase() + target.actor.slice(1);
+      if(this.loomConfig[this.renderMode] && this.loomConfig[this.renderMode].mappings){
+        const componentName = this.loomConfig[this.renderMode].mappings[loomObjectName];
+        if(componentName && this.$options.components[componentName])
+          return this.$options.components[componentName];
       }
+      
+      //defaults
+      if(this.$options.components[loomObjectName])
+        return this.$options.components[loomObjectName];
+      
+      return undefined;//loomTarget
     },
 
     setupVideo(element){
@@ -217,7 +228,7 @@ export default {
           return config
         }).then(config => {
           
-          if(config['version'] != '0.0.4'){
+          if(config['version'] != this.loomConfig['version']){
             console.error('ERROR, out of version config file, run Recorder/convert.py');
             return;
           }
@@ -282,7 +293,6 @@ export default {
           ++j;
           let frame = interaction.frames[interaction.frames.length-1];
           let target = this.targets[frame];
-          //todo: remove from order, add to permanent memory, add element
           this.$emit("addShortcut", {
             id: target.frame_no,
             content: target.name,
@@ -479,7 +489,7 @@ export default {
   },
   mounted(){
     window.vue = this;
-
+    this.loomConfig = loomConfig;
     this.renderMode = this.$refs.renderMode.value;
     this.load().then(() => {
       this.player = this.setupVideo(this.$refs.videoPlayer);

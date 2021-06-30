@@ -19,7 +19,7 @@
 <script>
 import loomBase from './loomBase'
 export default {
-  name: 'loomButton',
+  name: 'loomHover',
   mixins: [loomBase],
 
   mounted: function(){

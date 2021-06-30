@@ -24,6 +24,9 @@
     children : Array[config],
 */
 
+import loomConfig from './loomConfig.json'
+//todo: make accessing potentially unset loomConfig options less difficult 
+
 function getFrameData(canvas, video, frame){
   const context = canvas.getContext('2d');
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -52,10 +55,12 @@ function findUiBarTargets(config){
         const child2 = groups[j][k];
 
         if(
-          (Math.abs(child1.shape.dimensions.centerY - child2.shape.dimensions.centerY) <= deltaY && //horizontal
+          (loomConfig.mobile && loomConfig.mobile.spatialTransform && loomConfig.mobile.spatialTransform.horizontal_buttons_to_dropdown && 
+           Math.abs(child1.shape.dimensions.centerY - child2.shape.dimensions.centerY) <= deltaY && //horizontal
            Math.abs(child1.shape.dimensions.min_x - child2.shape.dimensions.max_x) <= gapX) 
           || 
-          (Math.abs(child1.shape.dimensions.min_y - child2.shape.dimensions.max_y) <= gapY && //vertical
+          (loomConfig.mobile && loomConfig.mobile.spatialTransform && loomConfig.mobile.spatialTransform.vertical_buttons_to_dropdown && 
+           Math.abs(child1.shape.dimensions.min_y - child2.shape.dimensions.max_y) <= gapY && //vertical
            Math.abs(child1.shape.dimensions.centerX - child2.shape.dimensions.centerY <= deltaX))
         ){
           const ogroup = child1.group;

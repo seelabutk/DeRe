@@ -1,7 +1,7 @@
 import json
 import argparse
 
-#TODO: make conversion.find support finding arrays
+#TODO: convert to javascript?
 
 class Conversion:
     def __init__(self, find, convert, recurse=True):
@@ -32,7 +32,7 @@ class Conversion:
     def _find(self, needle, haystack):
         for key, val in needle.items():
             
-            if not self.isIn(key, haystack):
+            if key != '*' and not self.isIn(key, haystack):
                 return None
             else:
                 if val == '*':
@@ -165,11 +165,20 @@ def polyAddDim(obj):
     del obj['shape']['centerX']
     del obj['shape']['centerY']
 
+#Version 0.0.5 - name standardization
+def brushToBrushingBox(obj):
+    obj['actor'] = 'brushingBox'
+
+def versionConvert(version):
+    def convert(obj):
+        obj['version'] = version
+    return convert
+
 #todo
 def circToPoly(obj):
     obj['shape'] = 20
 
-#Version 0.0.3 (current)
+#Version 0.0.5 (current)
 
 def main(ifile, ofile):
 
@@ -201,7 +210,14 @@ def main(ifile, ofile):
             iconfig['version'] = '0.0.4'
         
         if iconfig['version'] == '0.0.4':
-            print('current version')
+            configConverter = ConfigConverter([
+                Conversion(find={"actor": "brush"}, convert = brushToBrushingBox),
+                Conversion(find={'version': '0.0.4'}, convert = versionConvert('0.0.5'))
+            ])
+            iconfig = configConverter.convert(iconfig)
+        
+        if iconfig['version'] == '0.0.5':
+            print("current version")
 
     with open(ofile, 'w') as fout:
         json.dump(iconfig, fout)

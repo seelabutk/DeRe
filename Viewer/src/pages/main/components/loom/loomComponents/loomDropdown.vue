@@ -11,7 +11,7 @@
 <script>
 import loomBase from './loomBase'
 export default {
-  name: 'loomButton',
+  name: 'loomDropdown',
   mixins: [loomBase],
   methods: {
     onChange(e){
