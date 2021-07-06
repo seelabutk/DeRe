@@ -9,7 +9,7 @@ import MainPage from './pages/main/main.vue';
 export default {
   components: {
     MainPage,
-  }
+  },
 };
 
 </script>

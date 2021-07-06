@@ -1,6 +1,6 @@
 
 const mixin = {
-  props: ['targetData', 'showHint'],
+  props: ['targetData', 'showHint', 'interactable'],
   emits: ['changeState', 'addHistory'],
   data: function(){
     return {
@@ -50,8 +50,25 @@ const mixin = {
         height: h + 'px',
       };
     },
-
   },
+  
+  mounted(){
+    if(this.$refs.target){
+      this.$refs.target.style.display = this.interactable ? 'block': 'none';
+    }
+  },
+
+  watch: {
+    interactable: function(v){
+      if(this.$refs.target){
+        this.$refs.target.style.display = v ? 'block': 'none';
+      }
+    },
+  },
+
+  
+
+  
 
   methods: {
     highlight(){

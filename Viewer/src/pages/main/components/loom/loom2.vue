@@ -4,34 +4,24 @@
     :style="{
       height: currentConfig ? currentConfig.window.height + 'px' : '0px',
       width:  currentConfig ? currentConfig.window.width + loomMenuWidth + 'px' : '0px',
+      outline: regionSelect ? 'dashed white' : 'none',
     }"
   >
-
     <video 
       ref="videoPlayer" 
       class="video-js" 
-      :style="styleSize"
+      :style="{...styleSize, visibility: 'hidden'}"
     />
 
-    <div 
-      ref="overlay" 
-      id="overlay" 
-      :style="styleSize" 
-      :class="{'hide': !hintHelpState}"
+    <loom-video-canvas
+      v-for="videoTarget in currentVideoTargets"
+      :key="videoTarget.id"
+      :targetData="videoTarget"
+      :regionSelect="regionSelect"
+      :overlay="hintHelpState"
+      :currentTargets="currentTargets"
     />
     
-    <component 
-      v-for="target in currentTargets"
-      :key="target.id" 
-      :is="getComponent(target)" 
-      :ref="'target' + target.id"
-      :targetData="target"
-      :showHint="hintHelpState"
-      @change-state="changeState"
-      @add-history="updateInteractionHistory"
-    />
-    
-
     <div id="loom-menu" :style="loomMenuStyle">
       <span class="title">Loom</span>
 
@@ -41,12 +31,31 @@
         <option value="mobile">Mobile</option>
       </select>
 
+      <span class="text">Regions:</span>
+      <input 
+        ref="regionToggle"
+        @click="toggleRegion"
+        type="checkbox"
+        class="sidebar-toggle apple-switch btn btn-default"
+      />
+
+      <div v-show="regionExists">
+        <span class="text">Cut Region:</span>
+        <input 
+          ref="cutRegion"
+          @click="cutRegion"
+          type="button"
+          class="sidebar-toggle btn btn-default"
+          style="width: 20px !important"
+        />
+      </div>
+
       <span class="text">Hints:</span>
       <input 
+        ref="helpToggle"
         @click="toggleHintHelp"
         type="checkbox"
-        class="apple-switch btn btn-default"
-        id="hint-helper"
+        class="sidebar-toggle apple-switch btn btn-default"
       />
       <canvas 
         ref="miniMap" 
@@ -95,6 +104,7 @@ import loomButton from './loomComponents/loomButton.vue'
 import loomTarget from './loomComponents/loomTarget.vue'
 import loomHover from './loomComponents/loomHover.vue'
 import loomDropdown from './loomComponents/loomDropdown.vue'
+import loomVideoCanvas from './loomComponents/loomVideoCanvas.vue'
 
 //todo: brushing backwards
 //todo: multiple current_states for more complicated hiearchies?
@@ -108,6 +118,7 @@ export default {
     loomHover,
     loomDropdown,
     loomBrushingBox,
+    loomVideoCanvas,
   },
   props: {
     directory: {
@@ -128,23 +139,33 @@ export default {
   },
 
   data: () => ({
+    //state
     loomConfig: null,
     player: null,
     config: null,
+    renderMode: null,
     currentConfig: null,
     current_state: null,
+    //targets
     targets: {},
     targetCount: 0,
-    interactionHistory: [],
-    renderMode: null,
-    maxHistoryLength: 100,
-    fps: 30,
+    transformedTargetCache: {},
+    //video
+    videoTargets: {},
+    //videoTargetCache: {},
+    //history
     lastFrame: 0,
+    confidence: 5,
+    interactionHistory: [],
+    maxHistoryLength: 100,
+    //app
+    fps: 30,
     loomMenuWidth: 120,
     hintHelpState: false,
     searchResults: [],
-    confidence: 5,
-    transformedTargetCache: {},
+    regionSelect: false,
+    regionExists: false,
+    regionOrigin: null,
   }),
 
   computed: {
@@ -173,10 +194,14 @@ export default {
         target.parent == 'root') && target.hide != true
       );
     },
+    currentVideoTargets: function(){
+      return Object.values(this.videoTargets).filter(vt => {
+        return true; //TODO
+      });
+    },
   },
 
   methods: {
-
     getComponent: function(target){
       const loomObjectName = "loom" + target.actor.charAt(0).toUpperCase() + target.actor.slice(1);
       if(this.loomConfig[this.renderMode] && this.loomConfig[this.renderMode].mappings){
@@ -184,11 +209,9 @@ export default {
         if(componentName && this.$options.components[componentName])
           return this.$options.components[componentName];
       }
-      
       //defaults
       if(this.$options.components[loomObjectName])
         return this.$options.components[loomObjectName];
-      
       return undefined;//loomTarget
     },
 
@@ -245,6 +268,14 @@ export default {
       this.targets = this.transformedTargetCache[mode];
       this.current_state = this.targets[1];
       this.changeState(this.current_state);
+      
+      this.videoTargets['0'] = {
+        id: 0,
+        start: {x: 0, y: 0},
+        end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
+        video: this.$refs.videoPlayer,
+        targets: this.currentTargets,
+      }
       this.drawMiniMap();
     },
 
@@ -376,9 +407,8 @@ export default {
 
         if(target.hide) continue;
 
-        if (this.findChild(target, this.current_state) == null &&
-          this.findSibling(target, this.current_state) == null &&
-          target.parent != "root")  continue;
+        if(this.findChild(target, this.current_state) == null &&
+          this.findSibling(target, this.current_state) == null)  continue;
 
         if (target.shape.type != "poly")  continue;
 
@@ -420,6 +450,14 @@ export default {
 
     toggleHintHelp(){
       this.hintHelpState = !this.hintHelpState;
+      this.$refs.regionToggle.checked = false;
+      this.regionSelect = false;
+    },
+
+    toggleRegion(e){
+      this.regionSelect = !this.regionSelect;
+      this.$refs.helpToggle.checked = false;
+      this.hintHelpState = false;
     },
 
     inputSearch(e){
@@ -446,7 +484,6 @@ export default {
       }
       this.searchResults = results;
     },
-
 
     highlightTarget(e){
       let name = e.target.innerHTML;
@@ -486,15 +523,29 @@ export default {
       this.renderMode = mode
     },
 
+    cutRegion(){
+      this.regionOrigin.cutRegion();
+      this.drawMiniMap();
+    },
   },
   mounted(){
     window.vue = this;
+    const self = this;
     this.loomConfig = loomConfig;
     this.renderMode = this.$refs.renderMode.value;
     this.load().then(() => {
       this.player = this.setupVideo(this.$refs.videoPlayer);
+      
+      this.player.ready(function(){
+        this.on('timeupdate', () => self.emitter.emit('frameChange'));
+      });
+
       this.init(this.renderMode);
       this.emitter.on("changeState", this.changeState);
+      this.emitter.on("regionExists", (e) => {
+        this.regionExists = e.exists;
+        this.regionOrigin = e.origin;
+      });
     });
     
   },
@@ -554,8 +605,8 @@ export default {
     height: 20px;
   }
 
-  #hint-helper {
-    width: 100px;
+  .sidebar-toggle {
+    width: 100px !important;
     margin: 0 auto;
     display: inherit;
   }
@@ -582,10 +633,6 @@ export default {
     border: 1px solid rgba(250, 240, 80, 0.8);
   }
 
-  #overlay {
-    background-color: rgba(0, 0, 0, 0.5);
-  }
-
   .vjs-waiting {
     visibility: hidden;
     background: transparent;
@@ -593,11 +640,11 @@ export default {
   .vjs-loading-spinner {
     display: none !important;
   } 
-  .hide{
+  .hide {
       display: none;
   }
 
-  span.text{
+  span.text {
     display: inline-block;
     margin-top: 20px;
     margin-right: 10px;
@@ -642,8 +689,7 @@ export default {
     box-shadow: -2px 4px 3px rgba(0,0,0,0.05);
   }
 
-  #miniMap
-  {
+  #miniMap {
     margin-top: 10px;
     border-radius: 5px;
   }
