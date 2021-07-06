@@ -23,7 +23,6 @@ export default {
     const app = getCurrentInstance(); //to access globalProperties (emitter)
     watch(()=>props.items, (propItems) => {
 
-      console.log(propItems);
       let items = propItems.map((item, i) => ({
         ...item, 
         id: i, 

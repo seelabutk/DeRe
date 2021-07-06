@@ -1,6 +1,6 @@
 <template>
   <div>
-    
+    <!-- positioning of canvas, cutouts, components !-->
     <div
       :style="{
         position: 'absolute',
@@ -8,10 +8,10 @@
         height: height + 'px',
         top: top + 'px',
         left: left + 'px',
+        outline: '1px dashed black',
       }"
     >
-      
-      
+      <!-- canvas element to redraw video !-->
       <canvas
         ref="canvas"
         style="width: 100%; height: 100%;"
@@ -21,6 +21,8 @@
         @mousemove="onVideoMouseMove"
         @mouseleave="dragging=false"
       />
+
+      <!-- black background cutouts !-->
       <div 
         v-for="(target, id) in cutouts"
         :key="id"
@@ -34,11 +36,14 @@
           'pointer-events': 'none',
         }"
       />
+      <!-- drag selection !-->
       <div :style="dragSelectStyle"/>
+      <!-- hints overlay !-->
       <div 
         class='overlay'
         :style='{display: overlay ? "block" : "none"}'
       />
+      <!-- relative positioning of components !-->
       <div
         class="offset"
         :style="{
@@ -47,6 +52,7 @@
           left: String(-oleft) + 'px',
         }"
       >
+        <!-- interactive loom objects !-->
         <component 
           v-for="target in targetData.targets"
           :key="target.id" 
@@ -68,9 +74,10 @@
 
 // TODO: get rid of $parent stuff, pass through events via loomVideoCanvas in loom.vue
 //fix multiple select regions at once from different canvases
-//move loomObject ui to new cut location
 
 import loomBase from './loomBase'
+import polygonClipping from 'polygon-clipping'
+
 export default {
   name: 'loomVideoCanvas',
   mixins: [loomBase],
@@ -162,7 +169,7 @@ export default {
         start, end,
         parentCanvas: this,
         video: this.$parent.$refs.videoPlayer,
-        targets: this.offsetTargets(this.currentRegionTargets({start, end}), this.dragStart),
+        targets: this.cutCurrentRegionTargets({start, end}),
       };
       
       this.cutouts.push({
@@ -172,13 +179,8 @@ export default {
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
     },
 
-    offsetTargets(targets, offset){
-      //idk what to do here..
-      return targets;
-    },
-
     targetInRegion(region, target){
-      if(!target || !target.shape || !target.shape.points)  return false;
+      if(!target || !target.shape || !target.shape.points) return false;
       const points = target.shape.points;
       for(let i = 0; i < points.length; ++i){
         const p = points[i];
@@ -188,10 +190,56 @@ export default {
       }
       return false;
     },
-    currentRegionTargets(region){
-      return this.currentTargets.filter((target) => {
-        return this.targetInRegion(region, target);
+
+    splitTarget(region, target){
+      let target1 = JSON.parse(JSON.stringify(target)); //deep copy
+      const poly1 = [[
+        [region.start.x, region.start.y],
+        [region.end.x  , region.start.y],
+        [region.end.x  , region.end.y  ],
+        [region.start.x, region.end.y  ],
+        [region.start.x, region.start.y], //https://datatracker.ietf.org/doc/html/rfc7946 - "The first and last positions are equivalent, and they MUST contain identical values"
+      ]];
+
+      let target2 = JSON.parse(JSON.stringify(target)); //deep copy
+      const poly2 = [target.shape.points.map( p => [p.x, p.y] )];
+
+      let innerPolygon = polygonClipping.intersection(poly1, poly2)[0]; //todo: intersect all these into 1 poly
+      let outerPolygon = polygonClipping.difference(poly2, poly1)[0];
+
+      if(innerPolygon)  target1.shape.points = innerPolygon[0].map(p => ({x: p[0], y: p[1]}));
+      else  target1 = null;
+      
+      if(outerPolygon)  target2.shape.points = outerPolygon[0].map(p => ({x: p[0], y: p[1]}));
+      else target2.shape.points = [];
+      
+      return [target1, target2];
+    },
+    cutCurrentRegionTargets(region){
+      /* const removeFromParent = [];
+      const targets =  this.currentTargets.filter((target) => {
+        const ret = this.targetInRegion(region, target)
+        if(ret) removeFromParent.push(target.id);
+        return ret;
       });
+      removeFromParent.forEach(id => {
+        const idx = this.targetData.targets.findIndex(t => t.id == id);
+        this.targetData.targets.splice(idx, 1);
+      });
+      return targets; */
+
+      const splitParent = [];
+      const targets = [];
+      this.currentTargets.forEach(target => {
+        const [split1, split2] = this.splitTarget(region, target)
+        if(split1)  targets.push(split1);
+        if(split2)  splitParent.push(split2);
+      });
+      splitParent.forEach(split => {
+        const idx = this.targetData.targets.findIndex(t => t.id == split.id);
+        this.targetData.targets.splice(idx, 1, split);
+      });
+      return targets;
     },
 
     onVideoMouseMove(e){
@@ -201,7 +249,6 @@ export default {
       if(this.dragMode){
         this.top += e.movementY;
         this.left += e.movementX;
-        //this.$parent.drawMiniMap(); - doesn't work since position only changes relative to canvas
       }
     },
     
