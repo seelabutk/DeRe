@@ -54,9 +54,9 @@
       >
         <!-- interactive loom objects !-->
         <component 
-          v-for="target in targetData.targets"
+          v-for="target in currentTargets"
           :key="target.id" 
-          :is="$parent.getComponent(target)" 
+          :is="getComponent(target)" 
           :ref="'target' + target.id"
           :targetData="target"
           :showHint="$parent.hintHelpState"
@@ -75,19 +75,32 @@
 // TODO: get rid of $parent stuff, pass through events via loomVideoCanvas in loom.vue
 //fix multiple select regions at once from different canvases
 
-import loomBase from './loomBase'
+import loomBase from './loomBase.js'
+import utils from './utils.js'
 import polygonClipping from 'polygon-clipping'
+
+import loomBrushingBox from './loomBrushingBox.vue'
+import loomButton from './loomButton.vue'
+import loomTarget from './loomTarget.vue'
+import loomHover from './loomHover.vue'
+import loomDropdown from './loomDropdown.vue'
 
 export default {
   name: 'loomVideoCanvas',
   mixins: [loomBase],
   emits: ['mousemove'],
 
-  props: ['regionSelect', 'overlay', 'currentTargets'],
+  props: ['regionSelect', 'overlay', 'renderMode', 'loomConfig', 'current_state', 'currentConfig'],
+  components: {
+    loomTarget,
+    loomButton,
+    loomHover,
+    loomDropdown,
+    loomBrushingBox,
+  },
 
   data: function(){
     return {
-
       dragStart: {x: 0, y: 0},
       dragCurr: {x: 0, y: 0},
       dragging: false,
@@ -97,17 +110,19 @@ export default {
       top: 0,
       width: 0,
       height: 0,
-
       oleft: 0,
       otop: 0,
-
-      video: null,
-
+      
       cutouts: [],
+      video: null,
     };
   },
 
   computed: {
+
+    targets(){ return this.targetData.targets; },
+    currentTargets(){ return utils.currentTargets(this.current_state, this.targetData.targets); },
+
     dragSelectStyle: function(){
       const top = Math.min(this.dragStart.y, this.dragCurr.y) + 'px';
       const left = Math.min(this.dragStart.x, this.dragCurr.x) + 'px';
@@ -147,6 +162,20 @@ export default {
 
   methods: {
 
+    getComponent: function(target){
+      if(target.name == 'root') return undefined;
+      const loomObjectName = "loom" + target.actor.charAt(0).toUpperCase() + target.actor.slice(1);
+      if(this.loomConfig[this.renderMode] && this.loomConfig[this.renderMode].mappings){
+        const componentName = this.loomConfig[this.renderMode].mappings[loomObjectName];
+        if(componentName && this.$options.components[componentName])
+          return this.$options.components[componentName];
+      }
+      //defaults
+      if(this.$options.components[loomObjectName])
+        return this.$options.components[loomObjectName];
+      return undefined;//loomTarget
+    },
+
     cutRegion(){
       if(this.dragStart.x > this.dragCurr.x)  [this.dragStart.x, this.dragCurr.x] = [this.dragCurr.x, this.dragStart.x];
       if(this.dragStart.y > this.dragCurr.y)  [this.dragStart.y, this.dragCurr.y] = [this.dragCurr.y, this.dragStart.y];
@@ -179,18 +208,6 @@ export default {
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
     },
 
-    targetInRegion(region, target){
-      if(!target || !target.shape || !target.shape.points) return false;
-      const points = target.shape.points;
-      for(let i = 0; i < points.length; ++i){
-        const p = points[i];
-        if(p.x >= region.start.x && p.x <= region.end.x && p.y >= region.start.y && p.y <= region.end.y){
-          return true;
-        }
-      }
-      return false;
-    },
-
     splitTarget(region, target){
       let target1 = JSON.parse(JSON.stringify(target)); //deep copy
       const poly1 = [[
@@ -211,34 +228,37 @@ export default {
       else  target1 = null;
       
       if(outerPolygon)  target2.shape.points = outerPolygon[0].map(p => ({x: p[0], y: p[1]}));
-      else target2.shape.points = [];
-      
+      else target2.delete = true;
+    
       return [target1, target2];
     },
-    cutCurrentRegionTargets(region){
-      /* const removeFromParent = [];
-      const targets =  this.currentTargets.filter((target) => {
-        const ret = this.targetInRegion(region, target)
-        if(ret) removeFromParent.push(target.id);
-        return ret;
-      });
-      removeFromParent.forEach(id => {
-        const idx = this.targetData.targets.findIndex(t => t.id == id);
-        this.targetData.targets.splice(idx, 1);
-      });
-      return targets; */
 
-      const splitParent = [];
-      const targets = [];
-      this.currentTargets.forEach(target => {
+    cutCurrentRegionTargets(region){
+      let splitParent = [];
+      let targets = [];
+      let parents = [];
+
+      Object.values(this.targets).forEach(target => {
+        if(target.name == "root") return;
         const [split1, split2] = this.splitTarget(region, target)
         if(split1)  targets.push(split1);
         if(split2)  splitParent.push(split2);
       });
+
       splitParent.forEach(split => {
-        const idx = this.targetData.targets.findIndex(t => t.id == split.id);
-        this.targetData.targets.splice(idx, 1, split);
+        const key = Object.keys(this.targets).find(key => this.targets[key].id == split.id);
+        if(!split.delete) this.targets[key] = split;
+        else delete this.targets[key];
       });
+
+      targets.forEach(target => {
+        const parent = utils.findByName(target.parent, this.targets);
+        if(parents.find(p => p.id == parent.id) === undefined){
+          parents.push(parent)
+        }
+      });
+      targets = targets.concat(parents);
+
       return targets;
     },
 
@@ -311,12 +331,6 @@ export default {
     this.left = this.targetData.left != undefined ? this.targetData.left : this.oleft;
 
     this.processFrame();
-
-    this.eventData['click'] = function(e) {
-      this.$emit('changeState', this.targetData);
-      this.$emit('addHistory', this.targetData, e)
-    }.bind(this);
-
     this.emitter.on('frameChange', () => {
       this.redraw();
     });

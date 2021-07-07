@@ -67,7 +67,7 @@ export default {
     
     this.eventData["mouseup"] = function(e){
       this.brushing.state = false;
-      this.$emit('addHistory', this.targetData, e)
+      //this.$emit('addHistory', this.targetData, e)
     }.bind(this);
 
     this.eventData["mousemove"] = function(e){

@@ -19,7 +19,10 @@
       :targetData="videoTarget"
       :regionSelect="regionSelect"
       :overlay="hintHelpState"
-      :currentTargets="currentTargets"
+      :renderMode="renderMode"
+      :loomConfig="loomConfig"
+      :currentConfig="currentConfig"
+      :current_state="current_state"
     />
     
     <div id="loom-menu" :style="loomMenuStyle">
@@ -98,13 +101,8 @@ import 'video.js/dist/video-js.min.css'
 import Fuse from 'fuse.js'
 
 import transformMode from './transforms.js'
-
-import loomBrushingBox from './loomComponents/loomBrushingBox.vue'
-import loomButton from './loomComponents/loomButton.vue'
-import loomTarget from './loomComponents/loomTarget.vue'
-import loomHover from './loomComponents/loomHover.vue'
-import loomDropdown from './loomComponents/loomDropdown.vue'
 import loomVideoCanvas from './loomComponents/loomVideoCanvas.vue'
+import utils from './loomComponents/utils.js'
 
 //todo: brushing backwards
 //todo: multiple current_states for more complicated hiearchies?
@@ -113,13 +111,9 @@ import loomVideoCanvas from './loomComponents/loomVideoCanvas.vue'
 export default {
   name: 'Loom2',
   components: {
-    loomTarget,
-    loomButton,
-    loomHover,
-    loomDropdown,
-    loomBrushingBox,
-    loomVideoCanvas,
+    loomVideoCanvas
   },
+
   props: {
     directory: {
       type: String,
@@ -187,13 +181,7 @@ export default {
         left: this.currentConfig ? this.currentConfig.window.width  + 'px' : '0px',
       };
     },
-    currentTargets: function(){
-      return Object.values(this.targets).filter(target => 
-        (this.findChild(target, this.current_state) != null ||
-        this.findSibling(target, this.current_state) != null ||
-        target.parent == 'root') && target.hide != true
-      );
-    },
+
     currentVideoTargets: function(){
       return Object.values(this.videoTargets).filter(vt => {
         return true; //TODO
@@ -202,18 +190,6 @@ export default {
   },
 
   methods: {
-    getComponent: function(target){
-      const loomObjectName = "loom" + target.actor.charAt(0).toUpperCase() + target.actor.slice(1);
-      if(this.loomConfig[this.renderMode] && this.loomConfig[this.renderMode].mappings){
-        const componentName = this.loomConfig[this.renderMode].mappings[loomObjectName];
-        if(componentName && this.$options.components[componentName])
-          return this.$options.components[componentName];
-      }
-      //defaults
-      if(this.$options.components[loomObjectName])
-        return this.$options.components[loomObjectName];
-      return undefined;//loomTarget
-    },
 
     setupVideo(element){
 
@@ -268,15 +244,14 @@ export default {
       this.targets = this.transformedTargetCache[mode];
       this.current_state = this.targets[1];
       this.changeState(this.current_state);
-      
+      this.drawMiniMap();
       this.videoTargets['0'] = {
         id: 0,
         start: {x: 0, y: 0},
         end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
         video: this.$refs.videoPlayer,
-        targets: this.currentTargets,
+        targets: this.targets,
       }
-      this.drawMiniMap();
     },
 
     traverse(target){
@@ -370,82 +345,46 @@ export default {
     }, 
 
     changeStateWithFrameNo(frame, offset = 0){
-      let target = this.targets[frame];
-      if ( this.findChild(target, this.current_state) != null ||
-        this.findSibling(target, this.current_state) != null ||
-        this.findChild(target, this.currentConfig) != null ||
-        target.name == "root"
-      ) {
-        this.current_state = target;
-        let actualFrame = frame + 1 + offset;
-        if(this.lastFrame != actualFrame) {
-          this.player.currentTime((frame + 1 + offset) / this.fps);
-          this.lastFrame = actualFrame;
-        }
+      this.current_state = this.targets[frame];
+      let actualFrame = frame + 1 + offset;
+      if(this.lastFrame != actualFrame) {
+        this.player.currentTime((frame + 1 + offset) / this.fps);
+        this.lastFrame = actualFrame;
       }
       this.drawMiniMap();
     },
 
     drawMiniMap(){
-      let canvas = this.$refs.miniMap;
-      let width = this.loomMenuWidth - 20;
-      let ratio = 1.0 * width / this.currentConfig.window.width;
-      let height = this.currentConfig.window.height * ratio;
+      const canvas = this.$refs.miniMap;
+      const width = this.loomMenuWidth - 20;
+      const ratio = 1.0 * width / this.currentConfig.window.width;
+      const height = this.currentConfig.window.height * ratio;
+      const context = canvas.getContext("2d");
 
       canvas.width = width;
       canvas.height = height;
       canvas.style.width = width + 'px';
       canvas.style.height = height + 'px';
 
-      let context = canvas.getContext("2d");
       context.fillStyle = "#cccccc";
       context.fillRect(0, 0, width, height);
-
       context.fillStyle = "#aaaaaa";
-      for (var i in this.targets){
-        var target = this.targets[i];
 
-        if(target.hide) continue;
-
-        if(this.findChild(target, this.current_state) == null &&
-          this.findSibling(target, this.current_state) == null)  continue;
-
-        if (target.shape.type != "poly")  continue;
+      Object.values(this.targets).forEach( target => {
+        if((
+            utils.findChild(target, this.current_state) == null &&
+            utils.findSibling(target, this.current_state, this.targets) == null &&
+            target.parent != 'root'
+          ) || target.hide || target.shape.type != "poly"
+        ) return;
 
         context.beginPath();
-        context.moveTo(target.shape.points[0].x * ratio, target.shape.points[0].y * ratio);
-        for (var j = 1; j < target.shape.points.length; j++)  {
-          context.lineTo(target.shape.points[j].x * ratio, target.shape.points[j].y * ratio);
-        }
+        context.moveTo(target.shape.points[0].x*ratio, target.shape.points[0].y*ratio);
+        for (let j = 1; j < target.shape.points.length; j++)
+          context.lineTo(target.shape.points[j].x*ratio, target.shape.points[j].y*ratio);
         context.closePath();
         context.fill();
-      }
-    },
-
-    findByName(name){
-      for (var i in this.targets)
-        if (this.targets[i].name == name)
-          return this.targets[i];
-      return null;
-    },
-
-    // tries to find a target state in the immediate children of another based on its frame number
-    findChild(needle, haystack){
-        if (!haystack.hasOwnProperty("children")) return null; // then it's a leaf node
-        for (var i = 0; i < haystack.children.length; i++)
-          if (haystack.children[i].frame_no == needle.frame_no) 
-            return haystack.children[i];
-        return null;
-    },
-
-    // tries to find a target state (needle) in the siblings of another (other) based on its frame number
-    findSibling(needle, other){
-        let par = (other.parent == "root" ? this.currentConfig : this.findByName(other.parent)); 
-        if (par == null || !par.hasOwnProperty("children")) return null;
-        for (var i = 0; i < par.children.length; i++)
-          if (par.children[i].frame_no == needle.frame_no)
-            return par.children[i];
-        return null;
+      });
     },
 
     toggleHintHelp(){
@@ -488,7 +427,7 @@ export default {
     highlightTarget(e){
       let name = e.target.innerHTML;
       let target = null;
-      for (var i in this.targets) 
+      for (let i in this.targets) 
         if (this.targets[i]["name"] == name)
           target = this.targets[i];
 
@@ -497,7 +436,7 @@ export default {
           this.current_state = this.currentConfig;
           this.player.currentTime(1/this.fps);
         } else {
-          let parent = this.findByName(target.parent);
+          let parent = utils.findByName(target.parent, this.targets);
           this.changeStateWithFrameNo(parent.frame_no);
         }
       }
