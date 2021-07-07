@@ -447,7 +447,7 @@ export default {
 
     cacheModeChange(mode){
       if(!this.transformedTargetCache.hasOwnProperty(mode)){
-        const configCopy = JSON.parse(JSON.stringify(this.currentConfig));
+        const configCopy = utils.deepCopy(this.currentConfig);
         if(!this.config.hasOwnProperty(mode))
           this.config[mode] = transformMode(configCopy, this.config['desktop'], mode, this.player); //assume desktop is original mode
         this.targetCount = 0;

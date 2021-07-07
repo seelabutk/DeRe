@@ -19,9 +19,29 @@ function findSibling(target1, target2, targets){
   return findChild(target1, findByName(target2.parent, targets));
 }
 
+function deepCopy(obj){
+  if(typeof obj === 'object' && obj !== null){
+    if(obj.constructor === Array){
+      const ret = [];
+      obj.forEach(val => {
+        ret.push(deepCopy(val));
+      });
+      return ret;
+    }else{
+      const ret = {}
+      Object.entries(obj).forEach(([key, val]) => {
+        ret[key] = deepCopy(val);
+      });
+      return ret;
+    }
+  }
+  return obj;
+}
+
 export default {
   currentTargets,
   findByName,
   findChild,
   findSibling,
+  deepCopy,
 }

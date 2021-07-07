@@ -209,7 +209,7 @@ export default {
     },
 
     splitTarget(region, target){
-      let target1 = JSON.parse(JSON.stringify(target)); //deep copy
+      let target1 = utils.deepCopy(target);
       const poly1 = [[
         [region.start.x, region.start.y],
         [region.end.x  , region.start.y],
@@ -218,7 +218,7 @@ export default {
         [region.start.x, region.start.y], //https://datatracker.ietf.org/doc/html/rfc7946 - "The first and last positions are equivalent, and they MUST contain identical values"
       ]];
 
-      let target2 = JSON.parse(JSON.stringify(target)); //deep copy
+      let target2 = utils.deepCopy(target);
       const poly2 = [target.shape.points.map( p => [p.x, p.y] )];
 
       let innerPolygon = polygonClipping.intersection(poly1, poly2)[0]; //todo: intersect all these into 1 poly
@@ -228,7 +228,7 @@ export default {
       else  target1 = null;
       
       if(outerPolygon)  target2.shape.points = outerPolygon[0].map(p => ({x: p[0], y: p[1]}));
-      else target2.delete = true;
+      else target2.hide = true;
     
       return [target1, target2];
     },
@@ -247,12 +247,12 @@ export default {
 
       splitParent.forEach(split => {
         const key = Object.keys(this.targets).find(key => this.targets[key].id == split.id);
-        if(!split.delete) this.targets[key] = split;
-        else delete this.targets[key];
+        this.targets[key] = split;
       });
 
       targets.forEach(target => {
-        const parent = utils.findByName(target.parent, this.targets);
+        const parent = {...utils.findByName(target.parent, this.targets)}; //shallow copy
+        parent.hide = true;
         if(parents.find(p => p.id == parent.id) === undefined){
           parents.push(parent)
         }
