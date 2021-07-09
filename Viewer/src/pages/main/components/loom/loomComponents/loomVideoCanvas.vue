@@ -24,7 +24,7 @@
 
       <!-- black background cutouts !-->
       <div 
-        v-for="(target, id) in cutouts"
+        v-for="(target, id) in targetData.cutouts"
         :key="id"
         :style="{
           position: 'absolute',
@@ -113,7 +113,6 @@ export default {
       oleft: 0,
       otop: 0,
       
-      cutouts: [],
       video: null,
     };
   },
@@ -181,30 +180,28 @@ export default {
       if(this.dragStart.y > this.dragCurr.y)  [this.dragStart.y, this.dragCurr.y] = [this.dragCurr.y, this.dragStart.y];
       const id = String(this.dragStart.x) + '-' + String(this.dragStart.y) + '-' + String(this.dragCurr.x) + '-' + String(this.dragCurr.y);
 
-      const offset = {x: 0, y: 0};
-      for(let pc = this.targetData.parentCanvas; pc; pc = pc.targetData.parentCanvas){
-        const nestedOrigin = pc.cutouts[pc.cutouts.length-1].start; //last appended cutout will be correct location
-        offset.x += nestedOrigin.x;
-        offset.y += nestedOrigin.y;
-      }
+      const start = {x: this.dragStart.x + this.targetData.start.x, y: this.dragStart.y + this.targetData.start.y};
+      const end = {x: this.dragCurr.x    + this.targetData.start.x, y: this.dragCurr.y  + this.targetData.start.y};
 
-      const start = {x: this.dragStart.x + offset.x, y: this.dragStart.y + offset.y};
-      const end = {x: this.dragCurr.x  + offset.x, y: this.dragCurr.y  + offset.y};
-
+      //create new loomVideoCanvas component
       this.$parent.videoTargets[id] = {
         id,
         top: this.top + this.dragStart.y,
         left: this.left + this.dragStart.x,
         start, end,
         parentCanvas: this,
+        cutouts: [],
         video: this.$parent.$refs.videoPlayer,
         targets: this.cutCurrentRegionTargets({start, end}),
       };
       
-      this.cutouts.push({
+      //append cutout
+      this.targetData.cutouts.push({
         start: {...this.dragStart},
         end: {...this.dragCurr},
+        id: this.targetData.id, 
       });
+
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
     },
 
@@ -331,10 +328,17 @@ export default {
     this.left = this.targetData.left != undefined ? this.targetData.left : this.oleft;
 
     this.processFrame();
-    this.emitter.on('frameChange', () => {
-      this.redraw();
-    });
+    this.emitter.on('frameChange', this.redraw);
+  },
 
+  beforeUnmount(){
+    this.emitter.off('frameChange', this.redraw);
+    //delete cutouts
+    const id = this.targetData.parentCanvas.targetData.cutouts.findIndex(c => c.id == this.targetData.id);
+    if(id >= 0) this.targetData.parentCanvas.targetData.cutouts.splice(id, 1);
+    //save positions
+    this.targetData.top = this.top;
+    this.targetData.left = this.left;
   },
   
 }

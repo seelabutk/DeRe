@@ -12,7 +12,7 @@
       class="video-js" 
       :style="{...styleSize, visibility: 'hidden'}"
     />
-
+    
     <loom-video-canvas
       v-for="videoTarget in currentVideoTargets"
       :key="videoTarget.id"
@@ -146,7 +146,7 @@ export default {
     transformedTargetCache: {},
     //video
     videoTargets: {},
-    //videoTargetCache: {},
+    videoTargetCache: {},
     //history
     lastFrame: 0,
     confidence: 5,
@@ -242,16 +242,10 @@ export default {
       this.cacheModeChange(mode);
       this.currentConfig = this.config[mode];
       this.targets = this.transformedTargetCache[mode];
+      this.videoTargets = this.videoTargetCache[mode];
       this.current_state = this.targets[1];
       this.changeState(this.current_state);
       this.drawMiniMap();
-      this.videoTargets['0'] = {
-        id: 0,
-        start: {x: 0, y: 0},
-        end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
-        video: this.$refs.videoPlayer,
-        targets: this.targets,
-      }
     },
 
     traverse(target){
@@ -453,6 +447,19 @@ export default {
         this.targetCount = 0;
         this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
         this.transformedTargetCache[mode][0] = this.config[mode];
+      }
+
+      if(!this.videoTargetCache.hasOwnProperty(mode)){
+        this.videoTargetCache[mode] = {
+          '0': {
+            id: 0,
+            start: {x: 0, y: 0},
+            end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
+            video: this.$refs.videoPlayer,
+            cutouts: [],
+            targets: this.transformedTargetCache[mode],
+          }
+        };
       }
     },
 
