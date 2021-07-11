@@ -73,7 +73,7 @@
 <script>
 
 // TODO: get rid of $parent stuff, pass through events via loomVideoCanvas in loom.vue
-//fix multiple select regions at once from different canvases
+// -do I even want to do this? or is it better for these components to be tightly coupled?
 
 import loomBase from './loomBase.js'
 import utils from './utils.js'
@@ -184,7 +184,7 @@ export default {
       const end = {x: this.dragCurr.x    + this.targetData.start.x, y: this.dragCurr.y  + this.targetData.start.y};
 
       //create new loomVideoCanvas component
-      this.$parent.videoTargets[id] = {
+      this.$parent.videoTargets.push({
         id,
         top: this.top + this.dragStart.y,
         left: this.left + this.dragStart.x,
@@ -192,8 +192,9 @@ export default {
         parentCanvas: this,
         cutouts: [],
         video: this.$parent.$refs.videoPlayer,
+        current_state: this.current_state,
         targets: this.cutCurrentRegionTargets({start, end}),
-      };
+      });
       
       //append cutout
       this.targetData.cutouts.push({
@@ -278,6 +279,7 @@ export default {
       this.dragCurr = this.dragStart = {x: -10000, y: -10000};
 
       if(!this.isRightMouseButton(e)){
+        this.emitter.emit('clearSelection');
         this.dragMode = !e.shiftKey;
         this.dragging = this.regionSelect;
         if(e.shiftKey)
@@ -329,13 +331,20 @@ export default {
 
     this.processFrame();
     this.emitter.on('frameChange', this.redraw);
+    this.emitter.on('clearSelection', ()=>{
+      this.dragging = false;
+      this.dragMode = false;
+      this.dragStart = this.dragCurr = {x: -10000, y: -10000};
+    });
   },
 
   beforeUnmount(){
     this.emitter.off('frameChange', this.redraw);
     //delete cutouts
-    const id = this.targetData.parentCanvas.targetData.cutouts.findIndex(c => c.id == this.targetData.id);
-    if(id >= 0) this.targetData.parentCanvas.targetData.cutouts.splice(id, 1);
+    if(this.targetData.parentCanvas){
+      const id = this.targetData.parentCanvas.targetData.cutouts.findIndex(c => c.id == this.targetData.id);
+      if(id >= 0) this.targetData.parentCanvas.targetData.cutouts.splice(id, 1);
+    }
     //save positions
     this.targetData.top = this.top;
     this.targetData.left = this.left;

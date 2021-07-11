@@ -14,7 +14,7 @@
     />
     
     <loom-video-canvas
-      v-for="videoTarget in currentVideoTargets"
+      v-for="videoTarget in videoTargets"
       :key="videoTarget.id"
       :targetData="videoTarget"
       :regionSelect="regionSelect"
@@ -42,11 +42,20 @@
         class="sidebar-toggle apple-switch btn btn-default"
       />
 
-      <div v-show="regionExists">
-        <span class="text">Cut Region:</span>
-        <input 
-          ref="cutRegion"
-          @click="cutRegion"
+      <div v-show="regionSelect">
+        <div v-show="regionExists">
+          <span class="text">Cut Region:</span>
+          <input 
+            @click="cutRegion"
+            type="button"
+            class="sidebar-toggle btn btn-default"
+            style="width: 20px !important"
+          />
+        </div>
+        
+        <span class="text"> New Canvas </span>
+        <input
+          @click="newVideoTarget"
           type="button"
           class="sidebar-toggle btn btn-default"
           style="width: 20px !important"
@@ -104,9 +113,14 @@ import transformMode from './transforms.js'
 import loomVideoCanvas from './loomComponents/loomVideoCanvas.vue'
 import utils from './loomComponents/utils.js'
 
-//todo: brushing backwards
+//todo: brushing backwards in loomBrushingBox component
+
 //todo: multiple current_states for more complicated hiearchies?
 //todo: make more robust loom object class?
+//todo: make more robust videoTarget object class?
+
+//todo: add switching between loom video objects on each frame - use last defined videoTarget in the target heiarchy (LDVTH)
+// - each new instantiation of videoTarget should create a new top-level videoTarget instance - i.e videoTargetCache[mode][LDVTH]
 
 export default {
   name: 'Loom2',
@@ -145,7 +159,7 @@ export default {
     targetCount: 0,
     transformedTargetCache: {},
     //video
-    videoTargets: {},
+    //videoTargets: {},
     videoTargetCache: {},
     //history
     lastFrame: 0,
@@ -182,11 +196,21 @@ export default {
       };
     },
 
-    currentVideoTargets: function(){
-      return Object.values(this.videoTargets).filter(vt => {
-        return true; //TODO
-      });
-    },
+    videoTargets: function(){
+      if(!this.current_state || !this.videoTargetCache[this.renderMode]) return null;
+      for(let cs = this.current_state; cs; cs = utils.findByName(cs.parent, this.targets)){
+        const vts = Object.entries(this.videoTargetCache[this.renderMode]);
+        for(let i = 0; i < vts.length; ++i){
+          if(cs.id == vts[i][0]){
+            console.log(vts[i])
+            return vts[i][1];
+          }
+        }
+
+      }
+      console.error("No encompassing loom canvas found!");
+      return null;
+    }
   },
 
   methods: {
@@ -234,16 +258,17 @@ export default {
 
           this.config = config
           this.currentConfig = this.config[this.renderMode];
-          this.cacheModeChange(this.renderMode);
+          this.targetCacheModeChange(this.renderMode);
         });
     },
 
     init(mode){
-      this.cacheModeChange(mode);
-      this.currentConfig = this.config[mode];
+      this.targetCacheModeChange(mode);
       this.targets = this.transformedTargetCache[mode];
-      this.videoTargets = this.videoTargetCache[mode];
+      this.currentConfig = this.config[mode];
       this.current_state = this.targets[1];
+      this.videoCacheModeChange(mode);
+      //this.videoTargets = this.videoTargetCache[mode][this.current_state.id];
       this.changeState(this.current_state);
       this.drawMiniMap();
     },
@@ -439,7 +464,7 @@ export default {
       if(targetComponent) targetComponent.highlight();
     },
 
-    cacheModeChange(mode){
+    targetCacheModeChange(mode){
       if(!this.transformedTargetCache.hasOwnProperty(mode)){
         const configCopy = utils.deepCopy(this.currentConfig);
         if(!this.config.hasOwnProperty(mode))
@@ -448,17 +473,32 @@ export default {
         this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
         this.transformedTargetCache[mode][0] = this.config[mode];
       }
+    },
+    
+    newVideoTarget(){
+      this.videoTargetCache[this.renderMode][this.current_state.id] = [{
+        id: this.current_state.id,
+        start: {x: 0, y: 0},
+        end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
+        video: this.$refs.videoPlayer,
+        current_state: this.current_state,
+        cutouts: [],
+        targets: utils.deepCopy(this.targets),
+      }];
+    },
 
+    videoCacheModeChange(mode){
       if(!this.videoTargetCache.hasOwnProperty(mode)){
         this.videoTargetCache[mode] = {
-          '0': {
+          '-1': [{
             id: 0,
             start: {x: 0, y: 0},
             end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
             video: this.$refs.videoPlayer,
+            current_state: this.current_state,
             cutouts: [],
-            targets: this.transformedTargetCache[mode],
-          }
+            targets: utils.deepCopy(this.targets),
+          }]
         };
       }
     },
@@ -470,6 +510,7 @@ export default {
     },
 
     cutRegion(){
+      //if(!this.videoTargetCache[this.renderMode][this.current_state]) this.newVideoTarget();
       this.regionOrigin.cutRegion();
       this.drawMiniMap();
     },
