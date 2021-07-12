@@ -1,5 +1,17 @@
 <template>
   <div>
+    <video 
+      ref="videoPlayer" 
+      class="video-js" 
+      :style="{
+        position: 'absolute',
+        top: '0px',
+        left: '0px',
+        width:  currentConfig.window.width + 'px',
+        height: currentConfig.window.height + 'px',
+        visibility: 'hidden',
+      }"
+    />
     <!-- positioning of canvas, cutouts, components !-->
     <div
       :style="{
@@ -61,7 +73,7 @@
           :targetData="target"
           :showHint="$parent.hintHelpState"
           :interactable="!regionSelect"
-          @change-state="$parent.changeState"
+          @change-state="changeState"
           @add-history="$parent.updateInteractionHistory"
         />
       </div>
@@ -73,12 +85,15 @@
 <script>
 
 // TODO: get rid of $parent stuff, pass through events via loomVideoCanvas in loom.vue
-// -do I even want to do this? or is it better for these components to be tightly coupled?
 
 import loomBase from './loomBase.js'
 import utils from './utils.js'
 import polygonClipping from 'polygon-clipping'
 
+import videojs from 'video.js'
+import 'video.js/dist/video-js.min.css'
+
+import loomConfig from '../loomConfig.json'
 import loomBrushingBox from './loomBrushingBox.vue'
 import loomButton from './loomButton.vue'
 import loomTarget from './loomTarget.vue'
@@ -90,7 +105,7 @@ export default {
   mixins: [loomBase],
   emits: ['mousemove'],
 
-  props: ['regionSelect', 'overlay', 'renderMode', 'loomConfig', 'current_state', 'currentConfig'],
+  props: ['regionSelect', 'overlay', 'renderMode', 'currentConfig', 'start_state_id'],
   components: {
     loomTarget,
     loomButton,
@@ -113,7 +128,10 @@ export default {
       oleft: 0,
       otop: 0,
       
-      video: null,
+      current_state: Object.values(this.targetData.targets).find(t => t.id == this.start_state_id),
+
+      lastFrame: null,
+      fps: 30,
     };
   },
 
@@ -164,8 +182,8 @@ export default {
     getComponent: function(target){
       if(target.name == 'root') return undefined;
       const loomObjectName = "loom" + target.actor.charAt(0).toUpperCase() + target.actor.slice(1);
-      if(this.loomConfig[this.renderMode] && this.loomConfig[this.renderMode].mappings){
-        const componentName = this.loomConfig[this.renderMode].mappings[loomObjectName];
+      if(loomConfig[this.renderMode] && loomConfig[this.renderMode].mappings){
+        const componentName = loomConfig[this.renderMode].mappings[loomObjectName];
         if(componentName && this.$options.components[componentName])
           return this.$options.components[componentName];
       }
@@ -173,6 +191,38 @@ export default {
       if(this.$options.components[loomObjectName])
         return this.$options.components[loomObjectName];
       return undefined;//loomTarget
+    },
+
+    setupVideo(element){
+      let videoOptions = {
+        sources: [{
+          src: this.$parent.directory + '/' + this.$parent.video_filename,
+          type: 'video/mp4',
+        }],
+        controls: false,
+        loadingSpinner: false,
+        controlBar: false,
+      };
+      return videojs(element, videoOptions, function() {  
+        this.on("click", function(ev) {
+            ev.preventDefault();
+        });
+      });
+    },
+
+    changeState(target, offset = 0){
+      this.changeStateWithFrameNo(target.frame_no, offset);
+    }, 
+
+    changeStateWithFrameNo(frame, offset = 0){
+      //console.log(frame, this.targetData.targets);
+      this.$parent.changeStateWithFrameNo(frame, offset);
+      this.current_state = this.targetData.targets[frame];
+      const actualFrame = frame + 1 + offset;
+      if(this.lastFrame != actualFrame) {
+        this.player.currentTime(actualFrame/this.fps);
+        this.lastFrame = actualFrame;
+      }
     },
 
     cutRegion(){
@@ -191,8 +241,6 @@ export default {
         start, end,
         parentCanvas: this,
         cutouts: [],
-        video: this.$parent.$refs.videoPlayer,
-        current_state: this.current_state,
         targets: this.cutCurrentRegionTargets({start, end}),
       });
       
@@ -232,30 +280,33 @@ export default {
     },
 
     cutCurrentRegionTargets(region){
-      let splitParent = [];
-      let targets = [];
-      let parents = [];
+      let splitParent = {};
+      let targets = {};
+      let parents = {};
 
-      Object.values(this.targets).forEach(target => {
+      Object.entries(this.targets).forEach(([key, target]) => {
         if(target.name == "root") return;
         const [split1, split2] = this.splitTarget(region, target)
-        if(split1)  targets.push(split1);
-        if(split2)  splitParent.push(split2);
+        if(split1)  targets[key] = split1;
+        if(split2)  splitParent[key] = split2;
       });
 
-      splitParent.forEach(split => {
-        const key = Object.keys(this.targets).find(key => this.targets[key].id == split.id);
-        this.targets[key] = split;
-      });
+      Object.entries(splitParent).forEach(([key, split]) => this.targets[key] = split);
 
-      targets.forEach(target => {
+      Object.values(targets).forEach(target => {
         const parent = {...utils.findByName(target.parent, this.targets)}; //shallow copy
-        parent.hide = true;
-        if(parents.find(p => p.id == parent.id) === undefined){
-          parents.push(parent)
+        if(!parents[parent.frame_no]){
+          parent.hide = true;
+          parents[parent.frame_no] = parent;
         }
+        utils.findByName(parent.parent, this.targets).children.forEach(sibling => {
+          if(!parents[sibling.frame_no]){
+            sibling.hide = true;
+            parents[sibling.frame_no] = sibling;
+          }
+        });
       });
-      targets = targets.concat(parents);
+      targets = {...targets, ...parents};
 
       return targets;
     },
@@ -296,10 +347,10 @@ export default {
       const canvas = this.$refs.canvas;
       const ctx = canvas.getContext('2d');
       
-      const xVideoRatio = this.video.videoWidth/this.video.clientWidth;
-      const yVideoRatio = this.video.videoHeight/this.video.clientHeight;
+      const xVideoRatio = this.$refs.videoPlayer.videoWidth/this.$refs.videoPlayer.clientWidth;
+      const yVideoRatio = this.$refs.videoPlayer.videoHeight/this.$refs.videoPlayer.clientHeight;
       
-      ctx.drawImage(this.video, this.oleft*xVideoRatio, this.otop*yVideoRatio, 
+      ctx.drawImage(this.$refs.videoPlayer, this.oleft*xVideoRatio, this.otop*yVideoRatio, 
         this.width*xVideoRatio, this.height*yVideoRatio, 
         0, 0, this.width, this.height
       );
@@ -318,7 +369,7 @@ export default {
   },
 
   mounted(){
-    this.video = this.targetData.video;
+    const self = this;
 
     this.width = this.targetData.end.x - this.targetData.start.x;
     this.height = this.targetData.end.y - this.targetData.start.y;
@@ -329,8 +380,13 @@ export default {
     this.top =  this.targetData.top  != undefined ? this.targetData.top  : this.otop;
     this.left = this.targetData.left != undefined ? this.targetData.left : this.oleft;
 
+    this.player = this.setupVideo(this.$refs.videoPlayer);
+    this.player.ready(function(){
+      this.on('timeupdate', () => self.redraw());
+    });
     this.processFrame();
-    this.emitter.on('frameChange', this.redraw);
+    this.changeState(this.current_state);
+    
     this.emitter.on('clearSelection', ()=>{
       this.dragging = false;
       this.dragMode = false;
@@ -339,7 +395,6 @@ export default {
   },
 
   beforeUnmount(){
-    this.emitter.off('frameChange', this.redraw);
     //delete cutouts
     if(this.targetData.parentCanvas){
       const id = this.targetData.parentCanvas.targetData.cutouts.findIndex(c => c.id == this.targetData.id);
@@ -348,6 +403,8 @@ export default {
     //save positions
     this.targetData.top = this.top;
     this.targetData.left = this.left;
+
+    if (this.player) this.player.dispose();
   },
   
 }

@@ -1,9 +1,12 @@
 function currentTargets(current_state, targets){
-  return Object.values(targets).filter(target => 
-    (findChild(target, current_state) != null ||
-     findSibling(target, current_state, targets) != null ||
-     target.parent == 'root') && target.hide != true
+  const keys = Object.keys(targets).filter(tkey => 
+    (findChild(targets[tkey], current_state) != null ||
+     findSibling(targets[tkey], current_state, targets) != null ||
+     targets[tkey].parent == 'root') && targets[tkey].hide != true
   );
+  const ret = {};
+  keys.forEach(k => ret[k] = targets[k]);
+  return ret;
 }
 
 function findByName(name, targets){

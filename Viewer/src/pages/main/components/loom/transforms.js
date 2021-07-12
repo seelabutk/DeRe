@@ -163,7 +163,7 @@ function traverseMobile(config){
 
 // note: since we're working with objects, values will be copied by REFERENCE,
 // not by value, so no return values are needed in the traversal functions
-export default function(config, targets, mode, video){
+export default function(config, targets, mode){
   const canvas = document.createElement('canvas');
   canvas.width = config.window.width;
   canvas.height = config.window.height;

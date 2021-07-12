@@ -7,12 +7,6 @@
       outline: regionSelect ? 'dashed white' : 'none',
     }"
   >
-    <video 
-      ref="videoPlayer" 
-      class="video-js" 
-      :style="{...styleSize, visibility: 'hidden'}"
-    />
-    
     <loom-video-canvas
       v-for="videoTarget in videoTargets"
       :key="videoTarget.id"
@@ -20,9 +14,8 @@
       :regionSelect="regionSelect"
       :overlay="hintHelpState"
       :renderMode="renderMode"
-      :loomConfig="loomConfig"
       :currentConfig="currentConfig"
-      :current_state="current_state"
+      :start_state_id="current_state.id"
     />
     
     <div id="loom-menu" :style="loomMenuStyle">
@@ -102,25 +95,19 @@
 </template>
 
 <script>
-
-import loomConfig from './loomConfig.json'
-
 import videojs from 'video.js'
 import 'video.js/dist/video-js.min.css'
 import Fuse from 'fuse.js'
 
+import loomConfig from './loomConfig.json'
 import transformMode from './transforms.js'
 import loomVideoCanvas from './loomComponents/loomVideoCanvas.vue'
 import utils from './loomComponents/utils.js'
 
 //todo: brushing backwards in loomBrushingBox component
 
-//todo: multiple current_states for more complicated hiearchies?
 //todo: make more robust loom object class?
 //todo: make more robust videoTarget object class?
-
-//todo: add switching between loom video objects on each frame - use last defined videoTarget in the target heiarchy (LDVTH)
-// - each new instantiation of videoTarget should create a new top-level videoTarget instance - i.e videoTargetCache[mode][LDVTH]
 
 export default {
   name: 'Loom2',
@@ -148,7 +135,6 @@ export default {
 
   data: () => ({
     //state
-    loomConfig: null,
     player: null,
     config: null,
     renderMode: null,
@@ -159,15 +145,12 @@ export default {
     targetCount: 0,
     transformedTargetCache: {},
     //video
-    //videoTargets: {},
     videoTargetCache: {},
     //history
-    lastFrame: 0,
     confidence: 5,
     interactionHistory: [],
     maxHistoryLength: 100,
     //app
-    fps: 30,
     loomMenuWidth: 120,
     hintHelpState: false,
     searchResults: [],
@@ -200,13 +183,8 @@ export default {
       if(!this.current_state || !this.videoTargetCache[this.renderMode]) return null;
       for(let cs = this.current_state; cs; cs = utils.findByName(cs.parent, this.targets)){
         const vts = Object.entries(this.videoTargetCache[this.renderMode]);
-        for(let i = 0; i < vts.length; ++i){
-          if(cs.id == vts[i][0]){
-            console.log(vts[i])
-            return vts[i][1];
-          }
-        }
-
+        for(let i = 0; i < vts.length; ++i)
+          if(cs.id == vts[i][0])  return vts[i][1];
       }
       console.error("No encompassing loom canvas found!");
       return null;
@@ -251,7 +229,7 @@ export default {
           return config
         }).then(config => {
           
-          if(config['version'] != this.loomConfig['version']){
+          if(config['version'] != loomConfig['version']){
             console.error('ERROR, out of version config file, run Recorder/convert.py');
             return;
           }
@@ -268,7 +246,6 @@ export default {
       this.currentConfig = this.config[mode];
       this.current_state = this.targets[1];
       this.videoCacheModeChange(mode);
-      //this.videoTargets = this.videoTargetCache[mode][this.current_state.id];
       this.changeState(this.current_state);
       this.drawMiniMap();
     },
@@ -363,13 +340,8 @@ export default {
       this.changeStateWithFrameNo(target.frame_no, offset);
     }, 
 
-    changeStateWithFrameNo(frame, offset = 0){
+    changeStateWithFrameNo(frame){
       this.current_state = this.targets[frame];
-      let actualFrame = frame + 1 + offset;
-      if(this.lastFrame != actualFrame) {
-        this.player.currentTime((frame + 1 + offset) / this.fps);
-        this.lastFrame = actualFrame;
-      }
       this.drawMiniMap();
     },
 
@@ -453,7 +425,7 @@ export default {
       if(target) {
         if(target.parent == "root") {
           this.current_state = this.currentConfig;
-          this.player.currentTime(1/this.fps);
+          //this.player.currentTime(1/this.fps);
         } else {
           let parent = utils.findByName(target.parent, this.targets);
           this.changeStateWithFrameNo(parent.frame_no);
@@ -468,7 +440,7 @@ export default {
       if(!this.transformedTargetCache.hasOwnProperty(mode)){
         const configCopy = utils.deepCopy(this.currentConfig);
         if(!this.config.hasOwnProperty(mode))
-          this.config[mode] = transformMode(configCopy, this.config['desktop'], mode, this.player); //assume desktop is original mode
+          this.config[mode] = transformMode(configCopy, this.config['desktop'], mode); //assume desktop is original mode
         this.targetCount = 0;
         this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
         this.transformedTargetCache[mode][0] = this.config[mode];
@@ -481,7 +453,6 @@ export default {
         start: {x: 0, y: 0},
         end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
         video: this.$refs.videoPlayer,
-        current_state: this.current_state,
         cutouts: [],
         targets: utils.deepCopy(this.targets),
       }];
@@ -495,7 +466,6 @@ export default {
             start: {x: 0, y: 0},
             end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
             video: this.$refs.videoPlayer,
-            current_state: this.current_state,
             cutouts: [],
             targets: utils.deepCopy(this.targets),
           }]
@@ -510,23 +480,14 @@ export default {
     },
 
     cutRegion(){
-      //if(!this.videoTargetCache[this.renderMode][this.current_state]) this.newVideoTarget();
       this.regionOrigin.cutRegion();
       this.drawMiniMap();
     },
   },
   mounted(){
     window.vue = this;
-    const self = this;
-    this.loomConfig = loomConfig;
     this.renderMode = this.$refs.renderMode.value;
     this.load().then(() => {
-      this.player = this.setupVideo(this.$refs.videoPlayer);
-      
-      this.player.ready(function(){
-        this.on('timeupdate', () => self.emitter.emit('frameChange'));
-      });
-
       this.init(this.renderMode);
       this.emitter.on("changeState", this.changeState);
       this.emitter.on("regionExists", (e) => {
@@ -535,9 +496,6 @@ export default {
       });
     });
     
-  },
-  beforeUnmount(){
-    if (this.player) this.player.dispose();
   },
 }
 </script>
