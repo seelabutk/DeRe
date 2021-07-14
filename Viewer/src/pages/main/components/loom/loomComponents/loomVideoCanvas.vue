@@ -1,5 +1,8 @@
 <template>
   <div>
+
+    <!-- <canvas ref="canvasOutput" style="position: fixed; top: 0; left: 0; z-index: 100"/> -->
+
     <video 
       ref="videoPlayer" 
       class="video-js" 
@@ -54,6 +57,7 @@
       <div 
         class='overlay'
         :style='{display: overlay ? "block" : "none"}'
+        style="position: absolute; top: 0px; left: 0px; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5);"
       />
       <!-- relative positioning of components !-->
       <div
@@ -103,7 +107,7 @@ import loomDropdown from './loomDropdown.vue'
 export default {
   name: 'loomVideoCanvas',
   mixins: [loomBase],
-  emits: ['mousemove'],
+  emits: ['mousemove', 'frame_processed'],
 
   props: ['regionSelect', 'overlay', 'renderMode', 'currentConfig', 'start_state_id'],
   components: {
@@ -127,8 +131,11 @@ export default {
       height: 0,
       oleft: 0,
       otop: 0,
+      xVideoRatio: 0,
+      yVideoRatio: 0,
+      ctx: null,
       
-      current_state: Object.values(this.targetData.targets).find(t => t.id == this.start_state_id),
+      current_state: Object.values(this.targetData.targets).find(t => t.id == this.start_state_id) || Object.values(this.targetData.targets)[1],
 
       lastFrame: null,
       fps: 30,
@@ -215,7 +222,6 @@ export default {
     }, 
 
     changeStateWithFrameNo(frame, offset = 0){
-      //console.log(frame, this.targetData.targets);
       this.$parent.changeStateWithFrameNo(frame, offset);
       this.current_state = this.targetData.targets[frame];
       const actualFrame = frame + 1 + offset;
@@ -225,33 +231,48 @@ export default {
       }
     },
 
-    cutRegion(){
+    cutSelectedRegion(){
       if(this.dragStart.x > this.dragCurr.x)  [this.dragStart.x, this.dragCurr.x] = [this.dragCurr.x, this.dragStart.x];
       if(this.dragStart.y > this.dragCurr.y)  [this.dragStart.y, this.dragCurr.y] = [this.dragCurr.y, this.dragStart.y];
-      const id = String(this.dragStart.x) + '-' + String(this.dragStart.y) + '-' + String(this.dragCurr.x) + '-' + String(this.dragCurr.y);
-
-      const start = {x: this.dragStart.x + this.targetData.start.x, y: this.dragStart.y + this.targetData.start.y};
-      const end = {x: this.dragCurr.x    + this.targetData.start.x, y: this.dragCurr.y  + this.targetData.start.y};
-
-      //create new loomVideoCanvas component
-      this.$parent.videoTargets.push({
-        id,
-        top: this.top + this.dragStart.y,
-        left: this.left + this.dragStart.x,
-        start, end,
-        parentCanvas: this,
-        cutouts: [],
-        targets: this.cutCurrentRegionTargets({start, end}),
-      });
-      
-      //append cutout
-      this.targetData.cutouts.push({
-        start: {...this.dragStart},
-        end: {...this.dragCurr},
-        id: this.targetData.id, 
-      });
-
+      this.cutRegions({left: this.dragStart.x, top: this.dragStart.y, right: this.dragCurr.x, bottom: this.dragCurr.y});
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
+    },
+
+    cutRegions(regions){ 
+      this.targetData.parentCanvas
+      if(!this.targetData.parentCanvas){ // auto-new canvas - create new loomVideoCanvas component
+        this.$parent.newVideoTarget({
+          parentCanvas: this, 
+          startupFn: c => {c.cutRegions(regions)},
+          processed: true,
+        });
+        return;
+      }
+
+      if(regions.constructor !== Array) regions = [regions];
+      regions.forEach(region => {
+
+        const id = String(region.left) + '-' + String(region.top) + '-' + String(region.right) + '-' + String(region.bottom);
+        const start = {x: region.left  + this.targetData.start.x, y: region.top    + this.targetData.start.y};
+        const end   = {x: region.right + this.targetData.start.x, y: region.bottom + this.targetData.start.y};
+        
+        this.$parent.videoTargets.push({
+          id,
+          top: this.top + region.top,
+          left: this.left + region.left,
+          start, end,
+          parentCanvas: this,
+          cutouts: [],
+          targets: this.cutCurrentRegionTargets({start, end}),
+        });
+        
+        //append cutout
+        this.targetData.cutouts.push({
+          start: {x: region.left, y: region.top},
+          end: {x: region.right, y: region.bottom},
+          id: this.targetData.id, 
+        });
+      });
     },
 
     splitTarget(region, target){
@@ -295,11 +316,16 @@ export default {
 
       Object.values(targets).forEach(target => {
         const parent = {...utils.findByName(target.parent, this.targets)}; //shallow copy
-        if(!parents[parent.frame_no]){
+        if(!parents[parent.frame_no]){  //add parents
           parent.hide = true;
           parents[parent.frame_no] = parent;
         }
-        utils.findByName(parent.parent, this.targets).children.forEach(sibling => {
+        const grandparent = utils.findByName(parent.parent, this.targets);
+        if(!parents[grandparent.frame_no]){ //add grandparent for future parent sibling traversal
+          grandparent.hide = true;
+          parents[grandparent.frame_no] = grandparent;
+        }
+        grandparent.children.forEach(sibling => { //add parent siblings
           if(!parents[sibling.frame_no]){
             sibling.hide = true;
             parents[sibling.frame_no] = sibling;
@@ -344,35 +370,76 @@ export default {
     },
 
     redraw(){
-      const canvas = this.$refs.canvas;
-      const ctx = canvas.getContext('2d');
-      
-      const xVideoRatio = this.$refs.videoPlayer.videoWidth/this.$refs.videoPlayer.clientWidth;
-      const yVideoRatio = this.$refs.videoPlayer.videoHeight/this.$refs.videoPlayer.clientHeight;
-      
-      ctx.drawImage(this.$refs.videoPlayer, this.oleft*xVideoRatio, this.otop*yVideoRatio, 
-        this.width*xVideoRatio, this.height*yVideoRatio, 
+      this.xVideoRatio = this.$refs.videoPlayer.videoWidth/this.$refs.videoPlayer.clientWidth;
+      this.yVideoRatio = this.$refs.videoPlayer.videoHeight/this.$refs.videoPlayer.clientHeight;
+      this.ctx.drawImage(this.$refs.videoPlayer, this.oleft*this.xVideoRatio, this.otop*this.yVideoRatio, 
+        this.width*this.xVideoRatio, this.height*this.yVideoRatio, 
         0, 0, this.width, this.height
       );
+
+      this.processFrame();
     },
 
     processFrame(){
-      const canvas = this.$refs.canvas;
-      canvas.width = this.width;
-      canvas.height = this.height;
+      if(this.targetData.processed) return;
 
-      this.redraw();
+      const canvas = this.$refs.canvas;
+      const src = cv.imread(canvas);
+      const dst = cv.Mat.zeros(this.width, this.height, cv.CV_8UC3);
+      cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
+      cv.threshold(src, src, 254, 255, cv.THRESH_BINARY);
+      const contours = new cv.MatVector();
+      const hierarchy = new cv.Mat();
+      cv.findContours(src, contours, hierarchy, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE);
       
-      /* canvas.toBlob((blob)=>{
-      }, 'image/png'); */
+      //correct hierarchy data layout
+      const arrs = [];
+      const harr = Array.from(hierarchy.data32S);
+      while(harr.length > 0) arrs.push(harr.splice(0, 4));
+
+      //get top-level regions with children
+      const regions = [];
+      arrs.forEach((h, i) => { if(h[2] != -1 && h[3] == -1)  regions.push(i); });
+
+      function isOverlapped(rect0, rect1){
+        const r0 = {left: rect0.x, top: rect0.y, right: rect0.x + rect0.width, bottom: rect0.y + rect0.height};
+        const r1 = {left: rect1.x, top: rect1.y, right: rect1.x + rect1.width, bottom: rect1.y + rect1.height};
+        return !(r1.left > r0.right || r1.right < r0.left || r1.top > r0.bottom || r1.bottom < r0.top);
+      }
+
+      const rects = regions.filter(key => cv.contourArea(contours.get(parseInt(key)), false) > 1000)         // filter by area 
+      .map(key => cv.boundingRect(contours.get(parseInt(key))))                                              // get bounding boxes
+      .sort((a, b) => a.width * a.height > b.width * b.height)                                               //sort by area
+      .filter((rect, i, rects) => !rects.slice(i+1).some((r)=>isOverlapped(r, rect)))                        // filter out overlapping rects
+      .filter(rect => Math.abs(this.width - rect.width) > 100 && Math.abs(this.height - rect.height) > 100)  // filter out rects that try and crop too much of the screen out
+      .map(rect => ({left: rect.x, top: rect.y, right: rect.x + rect.width, bottom: rect.y + rect.height}));
+      
+      this.cutRegions(rects);
+      
+      /*rects.forEach(rect => {
+        cv.rectangle(dst, new cv.Point(rect.x, rect.y), new cv.Point(rect.x + rect.width, rect.y + rect.height));
+      });
+      cv.drawContours(dst, contours, -1, new cv.Scalar(255, 0, 0), 1, cv.LINE_8, hierarchy, 100);
+      this.$refs.canvasOutput.width = this.width;
+      this.$refs.canvasOutput.style.width = this.width + 'px';
+      this.$refs.canvasOutput.height = this.height;
+      this.$refs.canvasOutput.style.height = this.height + 'px';
+      cv.imshow(this.$refs.canvasOutput, dst); */
+
+      src.delete(); dst.delete(); contours.delete(); hierarchy.delete();
+      this.$emit('frame_processed');
     },
   },
 
   mounted(){
     const self = this;
+    this.ctx = this.$refs.canvas.getContext('2d');
 
     this.width = this.targetData.end.x - this.targetData.start.x;
     this.height = this.targetData.end.y - this.targetData.start.y;
+
+    this.$refs.canvas.width = this.width;
+    this.$refs.canvas.height = this.height;
     
     this.oleft = this.targetData.start.x;
     this.otop = this.targetData.start.y;
@@ -384,7 +451,6 @@ export default {
     this.player.ready(function(){
       this.on('timeupdate', () => self.redraw());
     });
-    this.processFrame();
     this.changeState(this.current_state);
     
     this.emitter.on('clearSelection', ()=>{
@@ -392,6 +458,8 @@ export default {
       this.dragMode = false;
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
     });
+
+    if(this.targetData.startupFn) this.targetData.startupFn(this);
   },
 
   beforeUnmount(){
@@ -411,12 +479,4 @@ export default {
 </script>
 
 <style scoped>
-.overlay {
-  position: absolute;
-  top: 0px;
-  left: 0px;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-}
 </style>

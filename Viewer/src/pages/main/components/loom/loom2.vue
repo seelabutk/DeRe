@@ -16,6 +16,7 @@
       :renderMode="renderMode"
       :currentConfig="currentConfig"
       :start_state_id="current_state.id"
+      @frame_processed="() => videoTarget.processed = true"
     />
     
     <div id="loom-menu" :style="loomMenuStyle">
@@ -39,7 +40,7 @@
         <div v-show="regionExists">
           <span class="text">Cut Region:</span>
           <input 
-            @click="cutRegion"
+            @click="cutRegions"
             type="button"
             class="sidebar-toggle btn btn-default"
             style="width: 20px !important"
@@ -108,6 +109,9 @@ import utils from './loomComponents/utils.js'
 
 //todo: make more robust loom object class?
 //todo: make more robust videoTarget object class?
+//change everything to use ids instead of frame_no's? - have separate cache for frame_no's mapping?
+
+//todo: maybe changeStateWithFrameNo should change to the parent if there are siblings? - could help in some scenarios
 
 export default {
   name: 'Loom2',
@@ -447,14 +451,14 @@ export default {
       }
     },
     
-    newVideoTarget(){
+    newVideoTarget(obj){
       this.videoTargetCache[this.renderMode][this.current_state.id] = [{
         id: this.current_state.id,
         start: {x: 0, y: 0},
         end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
-        video: this.$refs.videoPlayer,
         cutouts: [],
         targets: utils.deepCopy(this.targets),
+        ...obj
       }];
     },
 
@@ -462,10 +466,9 @@ export default {
       if(!this.videoTargetCache.hasOwnProperty(mode)){
         this.videoTargetCache[mode] = {
           '-1': [{
-            id: 0,
+            id: -1,
             start: {x: 0, y: 0},
             end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
-            video: this.$refs.videoPlayer,
             cutouts: [],
             targets: utils.deepCopy(this.targets),
           }]
@@ -479,8 +482,9 @@ export default {
       this.renderMode = mode
     },
 
-    cutRegion(){
-      this.regionOrigin.cutRegion();
+    cutRegions(){
+      //this.newVideoTarget();
+      this.regionOrigin.cutSelectedRegion();
       this.drawMiniMap();
     },
   },
