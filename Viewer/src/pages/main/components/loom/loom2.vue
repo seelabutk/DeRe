@@ -16,6 +16,7 @@
       :renderMode="renderMode"
       :currentConfig="currentConfig"
       :start_state_id="current_state.id"
+      :dragMode="dragMode"
       @frame_processed="() => videoTarget.processed = true"
     />
     
@@ -37,23 +38,68 @@
       />
 
       <div v-show="regionSelect">
+        <span class="text">Select Mode</span>
+        <input
+          ref="SelectMode"
+          @click="()=>dragMode=!dragMode"
+          type="checkbox"
+          class="sidebar-toggle apple-switch btn btn-default"
+          style="width: 50px !important;"
+        />
+        
         <div v-show="regionExists">
           <span class="text">Cut Region:</span>
           <input 
-            @click="cutRegions"
+            @click="cutRegion"
             type="button"
             class="sidebar-toggle btn btn-default"
             style="width: 20px !important"
           />
         </div>
         
-        <span class="text"> New Canvas </span>
+        <span class="text">New Canvas</span>
         <input
           @click="newVideoTarget"
           type="button"
           class="sidebar-toggle btn btn-default"
           style="width: 20px !important"
         />
+        
+        <div :style="currVideoCanvasSelected ? 'display: inline-block' : 'display: none'">
+          <span class="text">Cut</span> <br>
+          <input
+            @click="cut"
+            type="button"
+            class="sidebar-toggle btn btn-default"
+            style="width: 20px !important"
+          />
+
+          <span class="text">Copy</span> <br>
+          <input
+            @click="copy"
+            type="button"
+            class="sidebar-toggle btn btn-default"
+            style="width: 20px !important"
+          />
+
+          <span class="text">Delete</span> <br>
+          <input
+            @click="Delete"
+            type="button"
+            class="sidebar-toggle btn btn-default"
+            style="width: 20px !important"
+          />
+        </div>
+
+        <div :style="pasteBin ? 'display: inline-block' : 'display: none'">
+          <span class="text">Paste</span> <br>
+          <input
+            @click="paste"
+            type="button"
+            class="sidebar-toggle btn btn-default"
+            style="width: 20px !important"
+          />
+        </div>
       </div>
 
       <span class="text">Hints:</span>
@@ -139,7 +185,6 @@ export default {
 
   data: () => ({
     //state
-    player: null,
     config: null,
     renderMode: null,
     currentConfig: null,
@@ -155,12 +200,15 @@ export default {
     interactionHistory: [],
     maxHistoryLength: 100,
     //app
+    dragMode: true,
     loomMenuWidth: 120,
     hintHelpState: false,
     searchResults: [],
     regionSelect: false,
     regionExists: false,
     regionOrigin: null,
+    currVideoCanvasSelected: null,
+    pasteBin: null,
   }),
 
   computed: {
@@ -429,7 +477,6 @@ export default {
       if(target) {
         if(target.parent == "root") {
           this.current_state = this.currentConfig;
-          //this.player.currentTime(1/this.fps);
         } else {
           let parent = utils.findByName(target.parent, this.targets);
           this.changeStateWithFrameNo(parent.frame_no);
@@ -444,7 +491,7 @@ export default {
       if(!this.transformedTargetCache.hasOwnProperty(mode)){
         const configCopy = utils.deepCopy(this.currentConfig);
         if(!this.config.hasOwnProperty(mode))
-          this.config[mode] = transformMode(configCopy, this.config['desktop'], mode); //assume desktop is original mode
+          this.config[mode] = transformMode(configCopy, Object.values(this.config)[0], mode);
         this.targetCount = 0;
         this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
         this.transformedTargetCache[mode][0] = this.config[mode];
@@ -452,14 +499,16 @@ export default {
     },
     
     newVideoTarget(obj){
-      this.videoTargetCache[this.renderMode][this.current_state.id] = [{
+      const nvt = {
         id: this.current_state.id,
         start: {x: 0, y: 0},
         end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
         cutouts: [],
         targets: utils.deepCopy(this.targets),
         ...obj
-      }];
+      }
+      this.videoTargetCache[this.renderMode][this.current_state.id] = [nvt];
+      return nvt;
     },
 
     videoCacheModeChange(mode){
@@ -482,9 +531,36 @@ export default {
       this.renderMode = mode
     },
 
-    cutRegions(){
-      //this.newVideoTarget();
+    Delete(){
+      if(this.currVideoCanvasSelected){
+        const id = this.videoTargets.findIndex(vt => vt.id == this.currVideoCanvasSelected.targetData.id);
+        this.videoTargets.splice(id, 1);
+      }
+      this.currVideoCanvasSelected = null;
+    },
+    copy(){
+      this.pasteBin = this.currVideoCanvasSelected.targetData;
+      this.pasteBin.start_state = this.currVideoCanvasSelected.current_state;
+    },
+    cut(){
+      this.copy();
+      this.Delete();
+    },
+    paste(){
+      if(this.pasteBin) {
+        const fn = this.pasteBin.startupFn;
+        const copy = utils.deepCopy(this.pasteBin); //todo: vue complains about enumerating keys on components here
+        copy.startupFn = (c) => { c.updateParentCurrentState = false; if(fn) c.fn(c);}
+        copy.id = copy.id + '_copy';
+        this.videoTargets.push(copy);
+      }
+    },
+
+    cutRegion(){
+      this.dragMode = true;
+      this.$refs.SelectMode.checked = false;
       this.regionOrigin.cutSelectedRegion();
+
       this.drawMiniMap();
     },
   },
@@ -510,10 +586,6 @@ export default {
     width: 100%;
     height: 100%;
     margin: 0 auto;
-  }
-
-  #videoPlayer {
-    display: inline-block;
   }
 
   body {

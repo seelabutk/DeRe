@@ -23,7 +23,7 @@
         height: height + 'px',
         top: top + 'px',
         left: left + 'px',
-        outline: '1px dashed black',
+        outline: selected && regionSelect ? '1px dashed red' : '1px dashed black',
       }"
     >
       <!-- canvas element to redraw video !-->
@@ -109,7 +109,7 @@ export default {
   mixins: [loomBase],
   emits: ['mousemove', 'frame_processed'],
 
-  props: ['regionSelect', 'overlay', 'renderMode', 'currentConfig', 'start_state_id'],
+  props: ['regionSelect', 'overlay', 'renderMode', 'currentConfig', 'start_state_id', 'dragMode'],
   components: {
     loomTarget,
     loomButton,
@@ -120,10 +120,10 @@ export default {
 
   data: function(){
     return {
+      selected: false,
       dragStart: {x: 0, y: 0},
       dragCurr: {x: 0, y: 0},
       dragging: false,
-      dragMode: false,
 
       left: 0,
       top: 0,
@@ -134,9 +134,9 @@ export default {
       xVideoRatio: 0,
       yVideoRatio: 0,
       ctx: null,
-      
       current_state: Object.values(this.targetData.targets).find(t => t.id == this.start_state_id) || Object.values(this.targetData.targets)[1],
 
+      updateParentCurrentState: true,
       lastFrame: null,
       fps: 30,
     };
@@ -217,12 +217,12 @@ export default {
       });
     },
 
-    changeState(target, offset = 0){
-      this.changeStateWithFrameNo(target.frame_no, offset);
+    changeState(target, offset = 0, changeParent = true){
+      this.changeStateWithFrameNo(target.frame_no, offset, changeParent);
     }, 
 
-    changeStateWithFrameNo(frame, offset = 0){
-      this.$parent.changeStateWithFrameNo(frame, offset);
+    changeStateWithFrameNo(frame, offset = 0, changeParent = true){
+      if(changeParent && this.updateParentCurrentState) this.$parent.changeStateWithFrameNo(frame, offset);
       this.current_state = this.targetData.targets[frame];
       const actualFrame = frame + 1 + offset;
       if(this.lastFrame != actualFrame) {
@@ -230,6 +230,8 @@ export default {
         this.lastFrame = actualFrame;
       }
     },
+
+    
 
     cutSelectedRegion(){
       if(this.dragStart.x > this.dragCurr.x)  [this.dragStart.x, this.dragCurr.x] = [this.dragCurr.x, this.dragStart.x];
@@ -243,7 +245,13 @@ export default {
       if(!this.targetData.parentCanvas){ // auto-new canvas - create new loomVideoCanvas component
         this.$parent.newVideoTarget({
           parentCanvas: this, 
-          startupFn: c => {c.cutRegions(regions)},
+          startupFn: c => {
+            c.cutRegions(regions);
+            c.$parent.currVideoCanvasSelected = c;
+            c.emitter.emit('deselect');
+            c.selected = true;
+            delete c.targetData.startupFn;
+          },
           processed: true,
         });
         return;
@@ -255,7 +263,10 @@ export default {
         const id = String(region.left) + '-' + String(region.top) + '-' + String(region.right) + '-' + String(region.bottom);
         const start = {x: region.left  + this.targetData.start.x, y: region.top    + this.targetData.start.y};
         const end   = {x: region.right + this.targetData.start.x, y: region.bottom + this.targetData.start.y};
-        
+
+        let targets = this.cutCurrentRegionTargets({start, end});
+        if(Object.keys(targets).length == 0) targets = {'1': this.targets[1]};
+
         this.$parent.videoTargets.push({
           id,
           top: this.top + region.top,
@@ -263,7 +274,13 @@ export default {
           start, end,
           parentCanvas: this,
           cutouts: [],
-          targets: this.cutCurrentRegionTargets({start, end}),
+          targets,
+          startupFn: c => {
+            c.$parent.currVideoCanvasSelected = c;
+            c.emitter.emit('deselect');
+            c.selected = true;
+            delete c.targetData.startupFn;
+          },
         });
         
         //append cutout
@@ -321,16 +338,18 @@ export default {
           parents[parent.frame_no] = parent;
         }
         const grandparent = utils.findByName(parent.parent, this.targets);
-        if(!parents[grandparent.frame_no]){ //add grandparent for future parent sibling traversal
-          grandparent.hide = true;
-          parents[grandparent.frame_no] = grandparent;
-        }
-        grandparent.children.forEach(sibling => { //add parent siblings
-          if(!parents[sibling.frame_no]){
-            sibling.hide = true;
-            parents[sibling.frame_no] = sibling;
+        if(grandparent){
+          if(!parents[grandparent.frame_no]){ //add grandparent for future parent sibling traversal
+            grandparent.hide = true;
+            parents[grandparent.frame_no] = grandparent;
           }
-        });
+          grandparent.children.forEach(sibling => { //add parent siblings
+            if(!parents[sibling.frame_no]){
+              sibling.hide = true;
+              parents[sibling.frame_no] = sibling;
+            }
+          });
+        }
       });
       targets = {...targets, ...parents};
 
@@ -339,29 +358,23 @@ export default {
 
     onVideoMouseMove(e){
       if(!this.dragging)  return;
-
       this.dragCurr = {x: e.offsetX, y: e.offsetY};
       if(this.dragMode){
         this.top += e.movementY;
         this.left += e.movementX;
       }
     },
-    
-    isRightMouseButton(e){
-      if("which" in e)  return e.which == 3;
-      if("button" in e) return e.button == 2;
-    },
 
     onVideoMouseDown(e){
-      this.dragCurr = this.dragStart = {x: -10000, y: -10000};
-
-      if(!this.isRightMouseButton(e)){
-        this.emitter.emit('clearSelection');
-        this.dragMode = !e.shiftKey;
-        this.dragging = this.regionSelect;
-        if(e.shiftKey)
-          this.dragCurr = this.dragStart = {x: e.offsetX, y: e.offsetY};
+      if(!this.dragMode){
+        this.dragCurr = this.dragStart = {x: e.offsetX, y: e.offsetY};
+      }else{
+        this.dragCurr = this.dragStart = {x: -10000, y: -10000};
       }
+      this.emitter.emit('deselect');
+      this.selected = true;
+      this.$parent.currVideoCanvasSelected = this;
+      this.dragging = this.regionSelect;
       return false;
     },
 
@@ -451,15 +464,22 @@ export default {
     this.player.ready(function(){
       this.on('timeupdate', () => self.redraw());
     });
-    this.changeState(this.current_state);
     
     this.emitter.on('clearSelection', ()=>{
       this.dragging = false;
-      this.dragMode = false;
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
     });
 
+    this.emitter.on('deselect', () => {
+      this.selected = false;
+    });
+
     if(this.targetData.startupFn) this.targetData.startupFn(this);
+    if(this.targetData.start_state)  this.current_state = this.targetData.start_state
+
+    
+    
+    this.changeState(this.current_state, 0, false);
   },
 
   beforeUnmount(){
