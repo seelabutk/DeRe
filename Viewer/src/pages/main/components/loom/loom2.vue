@@ -156,9 +156,6 @@ import utils from './loomComponents/utils.js'
 //todo: make more robust videoTarget object class?
 //todo: change everything to use ids instead of frame_no's? - have separate cache for frame_no's mapping?
 
-//TODO: fix mobile transforms working with multiple videoCanvas'
-//TODO: fix UIBar working with multiple videoCanvas'
-
 export default {
   name: 'Loom2',
   components: {
@@ -509,8 +506,9 @@ export default {
         end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
         cutouts: [],
         targets: utils.deepCopy(this.targets),
+        parentCanvas: true,
         ...obj
-      }
+      };
       this.videoTargetCache[this.renderMode][this.current_state.id] = [nvt];
       return nvt;
     },

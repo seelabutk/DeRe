@@ -241,15 +241,12 @@ export default {
     },
 
     cutRegions(regions){ 
-      this.targetData.parentCanvas
       if(!this.targetData.parentCanvas){ // auto-new canvas - create new loomVideoCanvas component
         this.$parent.newVideoTarget({
           parentCanvas: this, 
           startupFn: c => {
             c.cutRegions(regions);
-            c.$parent.currVideoCanvasSelected = c;
             c.emitter.emit('deselect');
-            c.selected = true;
             delete c.targetData.startupFn;
           },
           processed: true,
@@ -276,9 +273,7 @@ export default {
           cutouts: [],
           targets,
           startupFn: c => {
-            c.$parent.currVideoCanvasSelected = c;
             c.emitter.emit('deselect');
-            c.selected = true;
             delete c.targetData.startupFn;
           },
         });
@@ -332,9 +327,17 @@ export default {
       Object.entries(splitParent).forEach(([key, split]) => this.targets[key] = split);
 
       Object.values(targets).forEach(target => {
-        const parent = {...utils.findByName(target.parent, this.targets)}; //shallow copy
+        let parent = {...utils.findByName(target.parent, this.targets)}; //shallow copy
         if(!parents[parent.frame_no]){  //add parents
-          parent.hide = true;
+          if(typeof parent.frame_no == 'string' && parent.frame_no.includes('frameless')){
+            //custom frameless html elements such as dropdown
+            //todo: maybe resize?
+            parent.children.forEach(c => {
+              if(!parents[c.frame_no]) parents[c.frame_no] = c;
+            });
+          } else {
+            parent.hide = true;
+          } 
           parents[parent.frame_no] = parent;
         }
         const grandparent = utils.findByName(parent.parent, this.targets);
@@ -446,7 +449,7 @@ export default {
   },
 
   mounted(){
-    const self = this;
+    const self = this;    
     this.ctx = this.$refs.canvas.getContext('2d');
 
     this.width = this.targetData.end.x - this.targetData.start.x;
@@ -476,9 +479,10 @@ export default {
     this.emitter.on(`changeState-${this.targetData.id}`, this.changeState);
 
     if(this.targetData.startupFn) this.targetData.startupFn(this);
-    if(this.targetData.start_state)  this.current_state = this.targetData.start_state
-
+    if(this.targetData.start_state)  this.current_state = this.targetData.start_state;
     
+    this.selected = true;
+    this.$parent.currVideoCanvasSelected = this;
     
     this.changeState(this.current_state, 0, false);
   },
