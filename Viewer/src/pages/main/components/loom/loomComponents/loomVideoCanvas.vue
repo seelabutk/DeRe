@@ -78,7 +78,7 @@
           :showHint="$parent.hintHelpState"
           :interactable="!regionSelect"
           @change-state="changeState"
-          @add-history="$parent.updateInteractionHistory"
+          @add-history="addHistory"
         />
       </div>
     </div>
@@ -231,7 +231,7 @@ export default {
       }
     },
 
-    
+    addHistory(t, e){ this.$parent.updateInteractionHistory(t, e, this.targetData.id); },
 
     cutSelectedRegion(){
       if(this.dragStart.x > this.dragCurr.x)  [this.dragStart.x, this.dragCurr.x] = [this.dragCurr.x, this.dragStart.x];
@@ -394,6 +394,7 @@ export default {
     },
 
     processFrame(){
+      return;
       if(this.targetData.processed) return;
 
       const canvas = this.$refs.canvas;
@@ -469,10 +470,10 @@ export default {
       this.dragging = false;
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
     });
-
     this.emitter.on('deselect', () => {
       this.selected = false;
     });
+    this.emitter.on(`changeState-${this.targetData.id}`, this.changeState);
 
     if(this.targetData.startupFn) this.targetData.startupFn(this);
     if(this.targetData.start_state)  this.current_state = this.targetData.start_state

@@ -33,7 +33,7 @@ export default {
       items.forEach(item => {
         let widget = grid.addWidget(item);
         widget.addEventListener('click', e => { //not very vue-like cuz gridstack sucks.
-          app.appContext.config.globalProperties.emitter.emit('changeState', item.target);
+          app.appContext.config.globalProperties.emitter.emit(`changeState-${item.vc}`, item.target);
         });
       });
     });

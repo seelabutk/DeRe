@@ -152,12 +152,12 @@ import loomVideoCanvas from './loomComponents/loomVideoCanvas.vue'
 import utils from './loomComponents/utils.js'
 
 //todo: brushing backwards in loomBrushingBox component
-
 //todo: make more robust loom object class?
 //todo: make more robust videoTarget object class?
-//change everything to use ids instead of frame_no's? - have separate cache for frame_no's mapping?
+//todo: change everything to use ids instead of frame_no's? - have separate cache for frame_no's mapping?
 
-//todo: maybe changeStateWithFrameNo should change to the parent if there are siblings? - could help in some scenarios
+//TODO: fix mobile transforms working with multiple videoCanvas'
+//TODO: fix UIBar working with multiple videoCanvas'
 
 export default {
   name: 'Loom2',
@@ -315,9 +315,10 @@ export default {
       return targets;
     },
 
-    updateInteractionHistory(target, e){
+    updateInteractionHistory(target, e, videoCanvas){
       let interaction = {
         id: target.frame_no,
+        videoCanvas,
         target,
         event: e,
       }
@@ -347,10 +348,12 @@ export default {
           ++j;
           let frame = interaction.frames[interaction.frames.length-1];
           let target = this.targets[frame];
+          let vc = interaction.vc;
           this.$emit("addShortcut", {
             id: target.frame_no,
             content: target.name,
             target,
+            vc,
           });
         }
       }
@@ -364,18 +367,19 @@ export default {
         let s = '';
         for(let j = i; j < n; ++j){
           
-          let {id} = this.interactionHistory[j];
+          const {id} = this.interactionHistory[j];
+          const vc = this.interactionHistory[j].videoCanvas;
           ss.push(id);
           s += '-' + String(id);
 
-          if (m[s] == undefined) m[s] = { frames: [], n: 0 };
+          if (m[s] == undefined) m[s] = { frames: [], n: 0, vc };
 
           m[s].frames = [...ss]; //clone
           m[s].n++;
         }
       }
 
-      let ids = Object.keys(m);
+      const ids = Object.keys(m);
       ids.sort((a,b) => {
         if(m[a].n > m[b].n)  return -1;
         else if (m[a].n == m[b].n && m[a].frames.length > m[b].frames.length) return -1;
@@ -569,7 +573,6 @@ export default {
     this.renderMode = this.$refs.renderMode.value;
     this.load().then(() => {
       this.init(this.renderMode);
-      this.emitter.on("changeState", this.changeState);
       this.emitter.on("regionExists", (e) => {
         this.regionExists = e.exists;
         this.regionOrigin = e.origin;
