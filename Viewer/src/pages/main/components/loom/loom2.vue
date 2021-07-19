@@ -37,69 +37,48 @@
         class="sidebar-toggle apple-switch btn btn-default"
       />
 
-      <div v-show="regionSelect">
-        <span class="text">Select Mode</span>
-        <input
-          ref="SelectMode"
-          @click="()=>dragMode=!dragMode"
-          type="checkbox"
-          class="sidebar-toggle apple-switch btn btn-default"
-          style="width: 50px !important;"
-        />
+      <div v-show="regionSelect" class="grid-container">
         
-        <div v-show="regionExists">
-          <span class="text">Cut Region:</span>
-          <input 
-            @click="cutRegion"
-            type="button"
-            class="sidebar-toggle btn btn-default"
-            style="width: 20px !important"
+        <div style="grid-area: selectMode">
+          <span class="text">Select Mode</span>
+          <input
+            ref="SelectMode"
+            @click="()=>dragMode=!dragMode"
+            type="checkbox"
+            class="sidebar-toggle apple-switch btn btn-default"
           />
         </div>
+
+        <div style="grid-area: newCanvas" class='activeInput'>
+          <span class="text">Canvas</span> <br>
+          <font-awesome-icon icon="plus-square" style="color: white" @click="newVideoTarget"/>
+        </div>
         
-        <span class="text">New Canvas</span>
-        <input
-          @click="newVideoTarget"
-          type="button"
-          class="sidebar-toggle btn btn-default"
-          style="width: 20px !important"
-        />
+        <div  style="grid-area: cutRegion" :class="regionExists ? 'activeInput' : 'inactiveInput'">
+          <span class="text">Region</span>
+          <font-awesome-icon icon="border-none"  @click="e => regionExists ? cutRegion(e) : null"/>
+        </div>
         
-        <div :style="currVideoCanvasSelected ? 'display: inline-block' : 'display: none'">
+        <div stlye='grid-area: cut' :class="currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
           <span class="text">Cut</span> <br>
-          <input
-            @click="cut"
-            type="button"
-            class="sidebar-toggle btn btn-default"
-            style="width: 20px !important"
-          />
+          <font-awesome-icon icon="cut" @click="e => currVideoCanvasSelected ? cut(e) : null"/>
+        </div>
 
+        <div stlye='grid-area: copy' :class="currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
           <span class="text">Copy</span> <br>
-          <input
-            @click="copy"
-            type="button"
-            class="sidebar-toggle btn btn-default"
-            style="width: 20px !important"
-          />
-
-          <span class="text">Delete</span> <br>
-          <input
-            @click="Delete"
-            type="button"
-            class="sidebar-toggle btn btn-default"
-            style="width: 20px !important"
-          />
+          <font-awesome-icon icon="copy" @click="e => currVideoCanvasSelected ? copy(e) : null"/>
         </div>
-
-        <div :style="pasteBin ? 'display: inline-block' : 'display: none'">
+        
+        <div style='grid-area: paste' :class="pasteBin ? 'activeInput' : 'inactiveInput'">
           <span class="text">Paste</span> <br>
-          <input
-            @click="paste"
-            type="button"
-            class="sidebar-toggle btn btn-default"
-            style="width: 20px !important"
-          />
+          <font-awesome-icon icon="paste" @click="e => pasteBin ? paste(e) : null"/>
         </div>
+
+        <div stlye='grid-area: delete' :class="currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
+          <span class="text">Delete</span> <br>
+          <font-awesome-icon icon="trash" @click="e => currVideoCanvasSelected ? Delete(e) : null"/>
+        </div>
+
       </div>
 
       <span class="text">Hints:</span>
@@ -603,6 +582,19 @@ export default {
     text-align: center;
   }
 
+  .grid-container {
+    display: grid;
+    grid-template-areas:
+      'selectMode selectMode'
+      'newCanvas  cutRegion '
+      'cut        copy      '
+      'delete     paste     ';
+  }
+
+  .grid-container > div {
+    text-align: center;
+  }
+
   table tr:last-child th:first-child {
     border-radius: 5px 5px 0 0;
   }
@@ -714,6 +706,16 @@ export default {
   #miniMap {
     margin-top: 10px;
     border-radius: 5px;
+  }
+
+  .activeInput {
+    color: white;
+    cursor: pointer;
+  }
+
+  .inactiveInput {
+    color: grey;
+    cursor: default;
   }
 
 </style>
