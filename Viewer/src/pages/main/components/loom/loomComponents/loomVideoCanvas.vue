@@ -90,7 +90,6 @@
 
 // TODO: get rid of $parent stuff, pass through events via loomVideoCanvas in loom.vue
 
-import loomBase from './loomBase.js'
 import utils from './utils.js'
 import polygonClipping from 'polygon-clipping'
 
@@ -106,10 +105,9 @@ import loomDropdown from './loomDropdown.vue'
 
 export default {
   name: 'loomVideoCanvas',
-  mixins: [loomBase],
   emits: ['mousemove', 'frame_processed'],
 
-  props: ['regionSelect', 'overlay', 'renderMode', 'currentConfig', 'start_state_id', 'dragMode'],
+  props: ['regionSelect', 'overlay', 'renderMode', 'currentConfig', 'start_state_id', 'dragMode', 'targetData'],
   components: {
     loomTarget,
     loomButton,

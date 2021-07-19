@@ -23,7 +23,8 @@ const mixin = {
         topOffset,
         leftOffset,
         polyString = "";
-
+      
+      if(!this.targetData.shape){console.log(this.targetData);}
       let minX = this.targetData.shape.dimensions.min_x;
       let minY = this.targetData.shape.dimensions.min_y;
       let maxX = this.targetData.shape.dimensions.max_x;

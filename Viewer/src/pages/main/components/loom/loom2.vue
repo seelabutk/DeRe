@@ -23,6 +23,11 @@
     <div id="loom-menu" :style="loomMenuStyle">
       <span class="title">Loom</span>
 
+      <div>
+        <font-awesome-icon icon="save" class="activeInput" @click="saveVideoCanvasState"/> &nbsp;
+        <font-awesome-icon icon="file" class="activeInput" @click="loadVideoCanvasState"/>
+      </div>
+
       <span class="text">Mode</span>
       <select name="device" ref="renderMode" @change="onDeviceChange">
         <option value="desktop">Desktop</option>
@@ -265,6 +270,8 @@ export default {
           this.config = config
           this.currentConfig = this.config[this.renderMode];
           this.targetCacheModeChange(this.renderMode);
+        }).then(() => {
+          //TODO: save/load videoTargetModes
         });
     },
 
@@ -510,6 +517,52 @@ export default {
       const mode = event.target.value;
       this.init(mode);
       this.renderMode = mode
+    },
+    
+    saveVideoCanvasState(){
+      const name = prompt("Enter name to save config as:");
+      if(name == null || name == "")  return;
+
+      const saveNames = JSON.parse(localStorage.getItem('saveNames')) || [];
+      if(!saveNames.some(n => n == name)) saveNames.push(name);
+      localStorage.setItem('saveNames', JSON.stringify(saveNames));
+
+      const vts = JSON.parse(JSON.stringify(this.videoTargetCache));//utils.deepCopy(this.videoTargetCache); - maximum call stack exceeded?
+      vts['current_state'] = this.current_state;
+      vts['renderMode'] = this.renderMode;
+
+      try{
+        localStorage.setItem(name, JSON.stringify(vts));
+      } catch (err) {
+        alert("Could not save to localStorage - too large");
+        console.error(err);
+        //todo: file download
+      }
+    },
+
+    loadVideoCanvasState(){
+      let loadOptions = localStorage.getItem('saveNames');
+      if(!loadOptions){
+        alert("No files to load");
+        //todo: file upload
+        return;
+      }
+      loadOptions = JSON.parse(loadOptions)
+      const loadName = prompt("Enter load file\n Available names: " + loadOptions.join(', '));
+      if(!loadOptions.some(lo => lo == loadName)){
+        alert("File does not exist");
+        return;
+      }
+      const vts = JSON.parse(localStorage.getItem(loadName));
+
+      console.log(vts);
+      
+      this.renderMode = vts['renderMode'];
+      this.current_state = vts['current_state'];
+      delete vts['renderMode'];
+      delete vts['current_state'];
+      this.videoTargetCache = vts;
+      this.init(this.renderMode);
     },
 
     Delete(){
