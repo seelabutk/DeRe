@@ -23,7 +23,7 @@
         height: height + 'px',
         top: top + 'px',
         left: left + 'px',
-        outline: selected && regionSelect ? '1px dashed red' : '1px dashed black',
+        outline: regionSelect && selected ? '1px dashed red' : regionSelect ? '1px dashed black' : 'none',
       }"
     >
       <!-- canvas element to redraw video !-->
@@ -79,6 +79,7 @@
           :interactable="!regionSelect"
           @change-state="changeState"
           @add-history="addHistory"
+          @onmouseleave="DeleteHoverCanvas"
         />
       </div>
     </div>
@@ -222,11 +223,51 @@ export default {
     changeStateWithFrameNo(frame, offset = 0, changeParent = true){
       if(changeParent && this.updateParentCurrentState) this.$parent.changeStateWithFrameNo(frame, offset);
       this.current_state = this.targetData.targets[frame];
-      const actualFrame = frame + 1 + offset;
-      if(this.lastFrame != actualFrame) {
-        this.player.currentTime(actualFrame/this.fps);
-        this.lastFrame = actualFrame;
+      let img = null;
+      //todo: check if is hover and needs additional videoCanvas' created to view full info
+      if(this.current_state.actor == "hover"){
+        img = cv.imread(this.$refs.canvas);
       }
+
+      const actualFrame = frame + 1 + offset;
+      if(this.lastFrame == actualFrame) return;
+
+      this.player.currentTime(actualFrame/this.fps);
+      this.lastFrame = actualFrame;
+
+      if(img !== null){
+        (new Promise(r => { //wait for frame change
+          this.emitter.on('post_redraw' + this.targetData.id, r);
+        })).then(() => {
+          //TODO: crop hover change
+          /* const newImg = cv.imread(this.$refs.canvas);
+          const rect = this.compareImages(img, newImg); */
+        });
+      }
+    },
+
+    compareImages(img1, img2){
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = 0;
+      let maxY = 0;
+      for (let j = 0; j < img1.rows; j++) {
+        for (let i = 0; i < img1.cols; i++) {
+          const color1 = Array.from(img1.ucharPtr(i, j));
+          const color2 = Array.from(img2.ucharPtr(i, j));
+          const colors = color1.map((c1, i) => [c1, color2[i]]);
+          if(colors.every(c => c[0] - c[1] != 0)){
+            if(i < minX) minX = i;
+            else if(i > maxX) maxX = i;
+            if(j < minY) minY = j;
+            else if(j > maxY) maxY = j;
+          }
+        }
+      }
+      const rect = {left: minX, top: minY, right: maxX, bottom: maxY};
+      
+      console.log(rect);
+      return rect;
     },
 
     addHistory(t, e){ this.$parent.updateInteractionHistory(t, e, this.targetData.id); },
@@ -271,6 +312,7 @@ export default {
           cutouts: [],
           targets,
           startupFn: c => {
+            c.current_state = this.current_state;
             c.emitter.emit('deselect');
             delete c.targetData.startupFn;
           },
@@ -390,16 +432,14 @@ export default {
         this.width*this.xVideoRatio, this.height*this.yVideoRatio, 
         0, 0, this.width, this.height
       );
-
+      this.emitter.emit('post_redraw' + this.targetData.id)
       this.processFrame();
     },
 
     processFrame(){
-      return;
       if(this.targetData.processed) return;
 
-      const canvas = this.$refs.canvas;
-      const src = cv.imread(canvas);
+      const src = cv.imread(this.$refs.canvas);
       const dst = cv.Mat.zeros(this.width, this.height, cv.CV_8UC3);
       cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
       cv.threshold(src, src, 254, 255, cv.THRESH_BINARY);
@@ -443,6 +483,10 @@ export default {
 
       src.delete(); dst.delete(); contours.delete(); hierarchy.delete();
       this.$emit('frame_processed');
+    },
+
+    DeleteHoverCanvas(){
+      console.log('TODO: delete me');
     },
   },
 

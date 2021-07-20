@@ -41,10 +41,15 @@ function deepCopy(obj){
   return obj;
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export default {
   currentTargets,
   findByName,
   findChild,
   findSibling,
   deepCopy,
+  sleep,
 }
