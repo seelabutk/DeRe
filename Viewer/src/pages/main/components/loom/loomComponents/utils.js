@@ -1,4 +1,5 @@
 function currentTargets(current_state, targets){
+  if(!current_state) return {};
   const keys = Object.keys(targets).filter(tkey => 
     (findChild(targets[tkey], current_state) != null ||
      findSibling(targets[tkey], current_state, targets) != null ||
@@ -41,6 +42,19 @@ function deepCopy(obj){
   return obj;
 }
 
+function absdiff(img1, img2){
+  const img = [];
+  for (let i = 0; i < img1.rows; i++) {
+    for (let j = 0; j < img1.cols; j++) {
+      const color1 = Array.from(img1.ucharPtr(i, j)).slice(0, 3);
+      const color2 = Array.from(img2.ucharPtr(i, j));
+      const colors = color1.map((c1, i) => [c1, color2[i]]);
+      colors.forEach(c => img.push(Math.abs(c[1] - c[0])));
+    }
+  }
+  return img;
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -51,5 +65,6 @@ export default {
   findChild,
   findSibling,
   deepCopy,
+  absdiff,
   sleep,
 }

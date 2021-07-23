@@ -1,7 +1,5 @@
 <template>
-  <div>
-
-    <!-- <canvas ref="canvasOutput" style="position: fixed; top: 0; left: 0; z-index: 100"/> -->
+  <div ref="container">
 
     <video 
       ref="videoPlayer" 
@@ -122,6 +120,7 @@ export default {
       selected: false,
       dragStart: {x: 0, y: 0},
       dragCurr: {x: 0, y: 0},
+      mouseLoc: {x: 0, y: 0},
       dragging: false,
 
       left: 0,
@@ -134,6 +133,7 @@ export default {
       yVideoRatio: 0,
       ctx: null,
       current_state: Object.values(this.targetData.targets).find(t => t.id == this.start_state_id) || Object.values(this.targetData.targets)[1],
+      hoverID: null,
 
       updateParentCurrentState: true,
       lastFrame: null,
@@ -184,7 +184,7 @@ export default {
   },
 
   methods: {
-
+    
     getComponent: function(target){
       if(target.name == 'root') return undefined;
       const loomObjectName = "loom" + target.actor.charAt(0).toUpperCase() + target.actor.slice(1);
@@ -225,7 +225,7 @@ export default {
       this.current_state = this.targetData.targets[frame];
       let img = null;
       //todo: check if is hover and needs additional videoCanvas' created to view full info
-      if(this.current_state.actor == "hover"){
+      if(this.current_state && this.current_state.actor == "hover"){
         img = cv.imread(this.$refs.canvas);
       }
 
@@ -236,38 +236,56 @@ export default {
       this.lastFrame = actualFrame;
 
       if(img !== null){
-        (new Promise(r => { //wait for frame change
+        (new Promise(r => { // wait for frame change
           this.emitter.on('post_redraw' + this.targetData.id, r);
         })).then(() => {
-          //TODO: crop hover change
-          /* const newImg = cv.imread(this.$refs.canvas);
-          const rect = this.compareImages(img, newImg); */
+          const newImg = cv.imread(this.$refs.canvas);
+          const rect = this.compareImages(img, newImg);
+          this.cutRegions(rect, false, false, true); // todo: error here
         });
       }
     },
 
+    viewImageData(img, width, height){
+      const canvas = document.createElement('canvas');
+      document.body.appendChild(canvas);
+      let imgData = new ImageData(new Uint8ClampedArray(img), width, height);
+      let ctx = canvas.getContext('2d');
+      canvas.style = `width: ${imgData.width}px; height: ${imgData.height}px; background-color: black; position: absolute; top: 0; left: 0;`;
+      canvas.width = imgData.width;
+      canvas.height = imgData.height;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.putImageData(imgData, 0, 0);
+    },
+
+    viewImageCV(img){
+      const canvas = document.createElement('canvas');
+      document.body.appendChild(canvas);
+      canvas.style = `width: ${img.cols}px; height: ${img.rows}px; background-color: black; position: absolute; top: 0; left: 0;`;
+      canvas.width = img.cols;
+      canvas.height = img.rows;
+      cv.imshow(canvas, img)
+    },
+
     compareImages(img1, img2){
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = 0;
-      let maxY = 0;
-      for (let j = 0; j < img1.rows; j++) {
-        for (let i = 0; i < img1.cols; i++) {
-          const color1 = Array.from(img1.ucharPtr(i, j));
-          const color2 = Array.from(img2.ucharPtr(i, j));
-          const colors = color1.map((c1, i) => [c1, color2[i]]);
-          if(colors.every(c => c[0] - c[1] != 0)){
-            if(i < minX) minX = i;
-            else if(i > maxX) maxX = i;
-            if(j < minY) minY = j;
-            else if(j > maxY) maxY = j;
-          }
-        }
-      }
-      const rect = {left: minX, top: minY, right: maxX, bottom: maxY};
+      const src = cv.matFromArray(img1.rows, img1.cols, cv.CV_8UC3, utils.absdiff(img1, img2));
+      cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
+      cv.threshold(src, src, 50, 255, cv.THRESH_BINARY);
+      const contours = new cv.MatVector();
+      const hierarchy = new cv.Mat();
+      cv.findContours(src, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+      let rects = [];
+      for(let i = 0; i < contours.size(); ++i)  rects.push(cv.boundingRect(contours.get(i)));
       
-      console.log(rect);
-      return rect;
+      function dist(p1, p2){
+        return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+      }
+      rects = rects.filter(r => r.width * r.height > 500 && dist(r, this.mouseLoc) < 200) //filter out small regions      
+        .sort((a, b) => dist(a, this.mouseLoc) - dist(b, this.mouseLoc));                 //sort by distance to mouse
+
+      const rect = rects[0];
+      return { left: rect.x, top: rect.y, right: rect.x + rect.width, bottom: rect.y + rect.height };
     },
 
     addHistory(t, e){ this.$parent.updateInteractionHistory(t, e, this.targetData.id); },
@@ -279,12 +297,12 @@ export default {
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
     },
 
-    cutRegions(regions){ 
+    cutRegions(regions, cutout = true, copyUI = true, hoverCutout = false){ 
       if(!this.targetData.parentCanvas){ // auto-new canvas - create new loomVideoCanvas component
         this.$parent.newVideoTarget({
           parentCanvas: this, 
           startupFn: c => {
-            c.cutRegions(regions);
+            c.cutRegions(regions, cutout, copyUI, hoverCutout);
             c.emitter.emit('deselect');
             delete c.targetData.startupFn;
           },
@@ -300,7 +318,10 @@ export default {
         const start = {x: region.left  + this.targetData.start.x, y: region.top    + this.targetData.start.y};
         const end   = {x: region.right + this.targetData.start.x, y: region.bottom + this.targetData.start.y};
 
-        let targets = this.cutCurrentRegionTargets({start, end});
+        if(hoverCutout) this.hoverID = id;
+
+        let targets = {};
+        if(copyUI)  targets = this.cutCurrentRegionTargets({start, end});
         if(Object.keys(targets).length == 0) targets = {'1': this.targets[1]};
 
         this.$parent.videoTargets.push({
@@ -314,16 +335,19 @@ export default {
           startupFn: c => {
             c.current_state = this.current_state;
             c.emitter.emit('deselect');
+            if(hoverCutout) c.$refs.container.style.pointerEvents = 'none';
             delete c.targetData.startupFn;
           },
+          processed: hoverCutout,
         });
         
-        //append cutout
-        this.targetData.cutouts.push({
-          start: {x: region.left, y: region.top},
-          end: {x: region.right, y: region.bottom},
-          id: this.targetData.id, 
-        });
+        if(cutout) { //append cutout
+          this.targetData.cutouts.push({
+            start: {x: region.left, y: region.top},
+            end: {x: region.right, y: region.bottom},
+            id: this.targetData.id, 
+          });
+        }
       });
     },
 
@@ -400,6 +424,7 @@ export default {
     },
 
     onVideoMouseMove(e){
+      this.mouseLoc = {x: e.offsetX, y: e.offsetY};
       if(!this.dragging)  return;
       this.dragCurr = {x: e.offsetX, y: e.offsetY};
       if(this.dragMode){
@@ -440,7 +465,7 @@ export default {
       if(this.targetData.processed) return;
 
       const src = cv.imread(this.$refs.canvas);
-      const dst = cv.Mat.zeros(this.width, this.height, cv.CV_8UC3);
+      
       cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
       cv.threshold(src, src, 254, 255, cv.THRESH_BINARY);
       const contours = new cv.MatVector();
@@ -470,27 +495,21 @@ export default {
       .map(rect => ({left: rect.x, top: rect.y, right: rect.x + rect.width, bottom: rect.y + rect.height}));
       
       this.cutRegions(rects);
-      
-      /*rects.forEach(rect => {
-        cv.rectangle(dst, new cv.Point(rect.x, rect.y), new cv.Point(rect.x + rect.width, rect.y + rect.height));
-      });
-      cv.drawContours(dst, contours, -1, new cv.Scalar(255, 0, 0), 1, cv.LINE_8, hierarchy, 100);
-      this.$refs.canvasOutput.width = this.width;
-      this.$refs.canvasOutput.style.width = this.width + 'px';
-      this.$refs.canvasOutput.height = this.height;
-      this.$refs.canvasOutput.style.height = this.height + 'px';
-      cv.imshow(this.$refs.canvasOutput, dst); */
-
-      src.delete(); dst.delete(); contours.delete(); hierarchy.delete();
+  
+      src.delete(); contours.delete(); hierarchy.delete();
       this.$emit('frame_processed');
     },
 
     DeleteHoverCanvas(){
-      console.log('TODO: delete me');
+      const idx = this.$parent.videoTargets.findIndex(vt => vt.id == this.hoverID);
+      if(idx >= 0) this.$parent.videoTargets.splice(idx, 1);
     },
   },
 
   mounted(){
+    if(this.targetData.startupFn) this.targetData.startupFn(this);
+    if(this.targetData.start_state)  this.current_state = this.targetData.start_state;
+    
     const self = this;    
     this.ctx = this.$refs.canvas.getContext('2d');
 
@@ -520,13 +539,10 @@ export default {
     });
     this.emitter.on(`changeState-${this.targetData.id}`, this.changeState);
 
-    if(this.targetData.startupFn) this.targetData.startupFn(this);
-    if(this.targetData.start_state)  this.current_state = this.targetData.start_state;
-    
     this.selected = true;
     this.$parent.currVideoCanvasSelected = this;
     
-    this.changeState(this.current_state, 0, false);
+    if(this.current_state) this.changeState(this.current_state, 0, false);
   },
 
   beforeUnmount(){
