@@ -88,6 +88,10 @@
 <script>
 
 // TODO: get rid of $parent stuff, pass through events via loomVideoCanvas in loom.vue
+// TODO: attempt to put all hoverCanvas logic into loomHover.vue?
+
+// TODO: polygonal videoCanvas regions, not just rectangles
+// TODO: implement vue-draggable-resizable for canvas'
 
 import utils from './utils.js'
 import polygonClipping from 'polygon-clipping'
@@ -133,7 +137,7 @@ export default {
       yVideoRatio: 0,
       ctx: null,
       current_state: Object.values(this.targetData.targets).find(t => t.id == this.start_state_id) || Object.values(this.targetData.targets)[1],
-      hoverID: null,
+      hoverMapping: {},
 
       updateParentCurrentState: true,
       lastFrame: null,
@@ -224,9 +228,10 @@ export default {
       if(changeParent && this.updateParentCurrentState) this.$parent.changeStateWithFrameNo(frame, offset);
       this.current_state = this.targetData.targets[frame];
       let img = null;
-      //todo: check if is hover and needs additional videoCanvas' created to view full info
-      if(this.current_state && this.current_state.actor == "hover"){
+
+      if(this.current_state && this.current_state.actor == "hover" && !this.hoverMapping[this.current_state.id]){
         img = cv.imread(this.$refs.canvas);
+        this.hoverMapping[this.current_state.id] = {};
       }
 
       const actualFrame = frame + 1 + offset;
@@ -239,8 +244,14 @@ export default {
         (new Promise(r => { // wait for frame change
           this.emitter.on('post_redraw' + this.targetData.id, r);
         })).then(() => {
-          const newImg = cv.imread(this.$refs.canvas);
-          const rect = this.compareImages(img, newImg);
+          let rect = null;
+          if(!this.hoverMapping[this.current_state.rect]){
+            const newImg = cv.imread(this.$refs.canvas);
+            rect = this.compareImages(img, newImg);
+            this.hoverMapping[this.current_state.id].rect = rect;
+          } else {
+            rect = this.hoverMapping[this.current_state.id].rect;
+          }
           this.cutRegions(rect, false, false, true); // todo: error here
         });
       }
@@ -297,6 +308,10 @@ export default {
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
     },
 
+    copyRegions(regions, copyUI = true, hoverCutout = false){
+      this.cutRegions(regions, false, copyUI, hoverCutout);
+    },
+
     cutRegions(regions, cutout = true, copyUI = true, hoverCutout = false){ 
       if(!this.targetData.parentCanvas){ // auto-new canvas - create new loomVideoCanvas component
         this.$parent.newVideoTarget({
@@ -318,7 +333,7 @@ export default {
         const start = {x: region.left  + this.targetData.start.x, y: region.top    + this.targetData.start.y};
         const end   = {x: region.right + this.targetData.start.x, y: region.bottom + this.targetData.start.y};
 
-        if(hoverCutout) this.hoverID = id;
+        if(hoverCutout) this.hoverMapping[this.current_state.id].id = id;
 
         let targets = {};
         if(copyUI)  targets = this.cutCurrentRegionTargets({start, end});
@@ -501,8 +516,9 @@ export default {
     },
 
     DeleteHoverCanvas(){
-      const idx = this.$parent.videoTargets.findIndex(vt => vt.id == this.hoverID);
+      const idx = this.$parent.videoTargets.findIndex(vt => vt.id == this.hoverMapping[this.current_state.id].id);
       if(idx >= 0) this.$parent.videoTargets.splice(idx, 1);
+      console.log('deleting');
     },
   },
 

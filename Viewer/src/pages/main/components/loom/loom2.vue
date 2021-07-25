@@ -60,7 +60,7 @@
         </div>
         
         <div  style="grid-area: cutRegion" :class="regionExists ? 'activeInput' : 'inactiveInput'">
-          <span class="text">Region</span>
+          <span class="text">Region</span> <br>
           <font-awesome-icon icon="border-none"  @click="e => regionExists ? cutRegion(e) : null"/>
         </div>
         
@@ -72,6 +72,16 @@
         <div stlye='grid-area: copy' :class="currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
           <span class="text">Copy</span> <br>
           <font-awesome-icon icon="copy" @click="e => currVideoCanvasSelected ? copy(e) : null"/>
+        </div>
+
+        <div stlye='grid-area: dup' :class="currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
+          <span class="text">Duplicate</span> <br>
+          <font-awesome-icon icon="clone" @click="e => currVideoCanvasSelected ? duplicate(e) : null"/>
+        </div>
+
+        <div stlye='grid-area: resize' :class="currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
+          <span class="text">Resize</span> <br>
+          <font-awesome-icon icon="expand-arrows-alt" @click="e => currVideoCanvasSelected ? resize(e) : null"/>
         </div>
         
         <div style='grid-area: paste' :class="pasteBin ? 'activeInput' : 'inactiveInput'">
@@ -580,10 +590,20 @@ export default {
       this.copy();
       this.Delete();
     },
+    duplicate(){
+      const pasteBin = this.pasteBin;
+      this.copy();
+      this.paste();
+      this.pasteBin = pasteBin;
+    },
+    resize(){
+      //todo
+    },
     paste(){
       if(this.pasteBin) {
         const fn = this.pasteBin.startupFn;
-        const copy = utils.deepCopy(this.pasteBin); //todo: vue complains about enumerating keys on components here
+        console.log(this.pasteBin);
+        const copy = JSON.parse(JSON.stringify(this.pasteBin)); //utils.deepCopy(this.pasteBin); //todo: vue complains about enumerating keys on components here
         copy.startupFn = (c) => { c.updateParentCurrentState = false; if(fn) c.fn(c);}
         copy.id = copy.id + '_copy';
         this.videoTargets.push(copy);
@@ -641,11 +661,13 @@ export default {
       'selectMode selectMode'
       'newCanvas  cutRegion '
       'cut        copy      '
+      'dup        des'
       'delete     paste     ';
   }
 
   .grid-container > div {
     text-align: center;
+    font-size: 0.9em;
   }
 
   table tr:last-child th:first-child {
