@@ -10,7 +10,7 @@
       style="fill: transparent; stroke-width: 5;"
       :style="showHint ? calcHintStyle : {}"
     >
-      <polygon ref="polygon" v-on="eventData" :points="points" />
+      <polygon ref="polygon" v-on="eventData" :points="points"/>
     </svg>
 
     <div 

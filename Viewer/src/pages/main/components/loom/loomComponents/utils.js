@@ -55,8 +55,56 @@ function absdiff(img1, img2){
   return img;
 }
 
+function polyToPath2D(poly){
+  let str = '';
+  str += `M ${poly[0].x} ${poly[0].y} `;
+  for(let i = 1; i < poly.length; ++i){
+    str += `L ${poly[i].x} ${poly[i].y} `;
+  }
+  str += `L ${poly[0].x} ${poly[0].y} `;
+  return new Path2D(str);
+}
+
+function polyToPolyString(poly, minX, minY){
+  if(!minX) minX = Math.min(...poly.map(p => p.x));
+  if(!minY) minY = Math.min(...poly.map(p => p.y));
+  let polyString = ''
+  poly.forEach((p, i) => {
+    polyString += p.x - minX + "," + (p.y - minY);
+    if (i !== poly.length - 1) polyString += " ";
+  });
+  return polyString;
+}
+
+function rectToPoly(rect){
+  return [
+    {x: rect.x, y: rect.y},
+    {x: rect.x + rect.width, y: rect.y},
+    {x: rect.x + rect.width, y: rect.y + rect.height},
+    {x: rect.x, y: rect.y + rect.height},
+  ];
+}
+
+function bound(v, min, max){
+  return Math.min(Math.max(min, v), max);
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function throttle (callback, limit, id=0) {
+  let waiting = {};
+  return function () {
+    if (!waiting[id]) {
+      callback.apply(this, arguments);
+      waiting[id] = true;
+      setTimeout(function () {
+        delete waiting[id]
+      }, limit);
+    }
+  }
+
 }
 
 export default {
@@ -66,5 +114,10 @@ export default {
   findSibling,
   deepCopy,
   absdiff,
+  polyToPath2D,
+  polyToPolyString,
+  rectToPoly,
+  bound,
   sleep,
+  throttle,
 }

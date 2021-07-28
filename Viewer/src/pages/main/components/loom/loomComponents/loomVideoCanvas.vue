@@ -21,7 +21,6 @@
         height: height + 'px',
         top: top + 'px',
         left: left + 'px',
-        outline: regionSelect && selected ? '1px dashed red' : regionSelect ? '1px dashed black' : 'none',
       }"
     >
       <!-- canvas element to redraw video !-->
@@ -34,21 +33,33 @@
         @mousemove="onVideoMouseMove"
         @mouseleave="dragging=false"
       />
-
-      <!-- black background cutouts !-->
-      <div 
-        v-for="(target, id) in targetData.cutouts"
-        :key="id"
+      <svg 
+        v-for="cutout in targetData.cutouts"
+        :key="cutout.id"
+        :width="cutout.width"
+        :height="cutout.height"
         :style="{
           position: 'absolute',
-          top: target.start.y + 'px',
-          left: target.start.x + 'px',
-          width: (target.end.x - target.start.x) + 'px', 
-          height: (target.end.y - target.start.y) + 'px',
+          width: cutout.width,
+          height: cutout.height,
+          top: cutout.top,
+          left: cutout.left,
           'background-color': 'black',
           'pointer-events': 'none',
         }"
-      />
+      >
+        <polygon :points="cutout.poly"/>
+      </svg>
+
+
+
+
+
+
+
+
+
+
       <!-- drag selection !-->
       <div :style="dragSelectStyle"/>
       <!-- hints overlay !-->
@@ -126,6 +137,7 @@ export default {
       dragCurr: {x: 0, y: 0},
       mouseLoc: {x: 0, y: 0},
       dragging: false,
+      resizePolygonMode: false,
 
       left: 0,
       top: 0,
@@ -137,11 +149,15 @@ export default {
       yVideoRatio: 0,
       ctx: null,
       current_state: Object.values(this.targetData.targets).find(t => t.id == this.start_state_id) || Object.values(this.targetData.targets)[1],
+      
       hoverMapping: {},
+      polygonMasks: {},
+      polygonResizeIdx: -1,
 
       updateParentCurrentState: true,
       lastFrame: null,
       fps: 30,
+      throttle: false,
     };
   },
 
@@ -149,6 +165,15 @@ export default {
 
     targets(){ return this.targetData.targets; },
     currentTargets(){ return utils.currentTargets(this.current_state, this.targetData.targets); },
+    currentPolygonMask(){ 
+      let cs;
+      for(cs = this.current_state; cs && !this.polygonMasks[cs.id]; cs = utils.findByName(cs.parent, this.targets))
+      if(cs && this.polygonMasks[cs.id]){
+        return this.polygonMasks[this.current_state.id];
+      }
+      return Object.values(this.polygonMasks)[0];
+    },
+    currentPolygonPath2D(){ return utils.polyToPath2D(this.currentPolygonMask); },
 
     dragSelectStyle: function(){
       const top = Math.min(this.dragStart.y, this.dragCurr.y) + 'px';
@@ -166,6 +191,7 @@ export default {
     },
 
     regionExists(){
+      if(this.dragMode || !this.regionSelect)  return false;
       if(
         this.dragStart.x == -10000 ||
         this.dragStart.y == -10000 ||
@@ -176,7 +202,6 @@ export default {
         Math.abs(this.dragCurr.x - this.dragStart.x) < 5 ||
         Math.abs(this.dragCurr.y - this.dragStart.y) < 5
       ) return false;
-      if(this.dragMode || !this.regionSelect)  return false;
       return true;
     },
   },
@@ -184,7 +209,10 @@ export default {
   watch: {
     regionExists: function(v){
       this.emitter.emit('regionExists', {exists: v, origin: this});
-    }
+    },
+    dragMode: function(v){
+      this.redraw();
+    },
   },
 
   methods: {
@@ -240,7 +268,7 @@ export default {
       this.player.currentTime(actualFrame/this.fps);
       this.lastFrame = actualFrame;
 
-      if(img !== null){
+      if(img !== null && !this.targetData.processed){
         (new Promise(r => { // wait for frame change
           this.emitter.on('post_redraw' + this.targetData.id, r);
         })).then(() => {
@@ -252,7 +280,8 @@ export default {
           } else {
             rect = this.hoverMapping[this.current_state.id].rect;
           }
-          this.cutRegions(rect, false, false, true); // todo: error here
+          rect = utils.rectToPoly(rect);
+          this.cutRegions(rect, false, false, true);
         });
       }
     },
@@ -304,11 +333,12 @@ export default {
     cutSelectedRegion(){
       if(this.dragStart.x > this.dragCurr.x)  [this.dragStart.x, this.dragCurr.x] = [this.dragCurr.x, this.dragStart.x];
       if(this.dragStart.y > this.dragCurr.y)  [this.dragStart.y, this.dragCurr.y] = [this.dragCurr.y, this.dragStart.y];
-      this.cutRegions({left: this.dragStart.x, top: this.dragStart.y, right: this.dragCurr.x, bottom: this.dragCurr.y});
+      const rect = utils.rectToPoly({...this.dragStart, width: this.dragCurr.x - this.dragStart.x, height: this.dragCurr.y - this.dragStart.y})
+      this.cutRegions(rect);
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
     },
 
-    copyRegions(regions, copyUI = true, hoverCutout = false){
+    copyRegions(regions, copyUI = true, hoverCutout = false){ //not currently used
       this.cutRegions(regions, false, copyUI, hoverCutout);
     },
 
@@ -326,23 +356,28 @@ export default {
         return;
       }
 
-      if(regions.constructor !== Array) regions = [regions];
-      regions.forEach(region => {
+      if(regions.length > 0 && regions[0].constructor !== Array) regions = [regions];
+      regions.forEach((region, i) => {
 
-        const id = String(region.left) + '-' + String(region.top) + '-' + String(region.right) + '-' + String(region.bottom);
-        const start = {x: region.left  + this.targetData.start.x, y: region.top    + this.targetData.start.y};
-        const end   = {x: region.right + this.targetData.start.x, y: region.bottom + this.targetData.start.y};
+        const id = String(this.targetData.id) + String(i);
+        const minX = Math.min(...region.map(p => p.x));
+        const maxX = Math.max(...region.map(p => p.x));
+        const minY = Math.min(...region.map(p => p.y));
+        const maxY = Math.max(...region.map(p => p.y));
+
+        const start = {x: minX + this.targetData.start.x, y: minY + this.targetData.start.y};
+        const end   = {x: maxX + this.targetData.start.x, y: maxY + this.targetData.start.y};
 
         if(hoverCutout) this.hoverMapping[this.current_state.id].id = id;
 
         let targets = {};
-        if(copyUI)  targets = this.cutCurrentRegionTargets({start, end});
-        if(Object.keys(targets).length == 0) targets = {'1': this.targets[1]};
+        if(copyUI)  targets = this.cutCurrentRegionTargets(region);
+        if(Object.keys(targets).length == 0) targets = {[this.current_state.frame_no]: this.targets[this.current_state.frame_no]};
 
         this.$parent.videoTargets.push({
           id,
-          top: this.top + region.top,
-          left: this.left + region.left,
+          top: this.top + minY,
+          left: this.left + minX,
           start, end,
           parentCanvas: this,
           cutouts: [],
@@ -356,11 +391,15 @@ export default {
           processed: hoverCutout,
         });
         
-        if(cutout) { //append cutout
+        if(cutout && this.currentPolygonMask) { //append cutout  
+          const poly = utils.polyToPolyString(region);
           this.targetData.cutouts.push({
-            start: {x: region.left, y: region.top},
-            end: {x: region.right, y: region.bottom},
-            id: this.targetData.id, 
+            poly,
+            width: maxX-minX,
+            height: maxY-minY,
+            top: minY,
+            left: minX,
+            id: this.targetData.id,
           });
         }
       });
@@ -368,12 +407,10 @@ export default {
 
     splitTarget(region, target){
       let target1 = utils.deepCopy(target);
+      region = region.map(r => ([r.x, r.y]));
+      region.push(Object.values(region[0]));
       const poly1 = [[
-        [region.start.x, region.start.y],
-        [region.end.x  , region.start.y],
-        [region.end.x  , region.end.y  ],
-        [region.start.x, region.end.y  ],
-        [region.start.x, region.start.y], //https://datatracker.ietf.org/doc/html/rfc7946 - "The first and last positions are equivalent, and they MUST contain identical values"
+        region
       ]];
 
       let target2 = utils.deepCopy(target);
@@ -438,8 +475,65 @@ export default {
       return targets;
     },
 
+    resizePolygon(e){
+      this.currentPolygonMask[this.polygonResizeIdx] = {x: e.offsetX, y: e.offsetY};
+      //todo: if vertex comes too close to another vertex, delete (merge) them
+      this.redraw(false);
+    },
+
+    addNewVertex(vertIdx, e){
+      this.currentPolygonMask.splice(vertIdx+1, 0, {x: e.offsetX, y: e.offsetY});
+      this.resizePolygonMode = true;
+      this.polygonResizeIdx = vertIdx+1;
+      this.redraw(false);
+    },
+
+    isPolygonVertexHovered(e){
+      if(!this.regionSelect) return -1;
+     
+      const thickness = 2;
+      const boxSize = 8;
+      const bs = Math.ceil(boxSize/2 + thickness/2);
+      const paths = this.currentPolygonMask.map(pm => {
+        let dx = 0, dy = 0;
+
+        if(bs > pm.x) dx = -(pm.x-bs);
+        else if(this.width < pm.x+bs) dx = this.width - (pm.x+bs);
+
+        if(bs > pm.y) dy = -(pm.y-bs);
+        else if(this.height < pm.y+bs) dy = this.height - (pm.y+bs);
+        
+        return utils.polyToPath2D([{x: pm.x+dx-bs, y: pm.y+dy-bs}, {x: pm.x+dx+bs, y: pm.y+dy-bs}, {x: pm.x+dx+bs, y: pm.y+dy+bs}, {x: pm.x+dx-bs, y: pm.y+dy+bs}]);
+      });
+      return paths.findIndex(path => this.ctx.isPointInPath(path, e.offsetX, e.offsetY));
+    },
+
+    isPolygonLineHovered(e){
+      if(!this.regionSelect) return -1;
+      const lines = this.currentPolygonMask.map((pm, i, pms) => {
+        const nidx = (i+1)%pms.length;
+        const pn = pms[nidx];
+        return utils.polyToPath2D([pm, pn]);
+      });
+      return lines.findIndex(line => this.ctx.isPointInStroke(line, e.offsetX, e.offsetY));
+    },
+
     onVideoMouseMove(e){
       this.mouseLoc = {x: e.offsetX, y: e.offsetY};
+      
+      if(this.resizePolygonMode){
+        this.resizePolygon(e);
+        return;
+      } else {
+        if(this.isPolygonVertexHovered(e) >= 0){
+          this.$refs.canvas.style.cursor = 'move';
+        } else if(this.isPolygonLineHovered(e) >= 0) {
+          this.$refs.canvas.style.cursor = 'crosshair';
+        } else {
+          this.$refs.canvas.style.cursor = 'default';
+        }
+      }
+
       if(!this.dragging)  return;
       this.dragCurr = {x: e.offsetX, y: e.offsetY};
       if(this.dragMode){
@@ -449,6 +543,23 @@ export default {
     },
 
     onVideoMouseDown(e){
+      this.$refs.canvas.style.cursor = 'default';
+      
+      const resizePoly = this.isPolygonVertexHovered(e);
+      if(resizePoly >= 0){
+        this.$refs.canvas.style.cursor = 'move';
+        this.resizePolygonMode = true;
+        this.polygonResizeIdx = resizePoly;
+        this.redraw(false);
+      }
+
+      const newVertex = this.isPolygonLineHovered(e);
+      if(newVertex >= 0 && resizePoly < 0){  
+        this.$refs.canvas.style.cursor = 'crosshair';
+        this.addNewVertex(newVertex, e);
+        this.redraw(false);
+      }
+
       if(!this.dragMode){
         this.dragCurr = this.dragStart = {x: e.offsetX, y: e.offsetY};
       }else{
@@ -463,17 +574,60 @@ export default {
 
     onVideoMouseUp(e){
       this.dragging = false;
+      this.resizePolygonMode = false;
+      this.$refs.canvas.style.cursor = 'default';
     },
 
-    redraw(){
+    drawPolyOutline(ctx, poly){
+      const color = '#ff0000';
+      const thickness = 2;
+      const boxSize = 8;
+      ctx.lineWidth = thickness;
+      ctx.strokeStyle = color;
+
+      let square = (function(xp, yp){
+        const bs = Math.ceil(boxSize/2 + thickness/2);
+        ctx.strokeRect(utils.bound(xp, bs, this.width-bs)-bs, utils.bound(yp, bs, this.height-bs)-bs, boxSize, boxSize);
+      }).bind(this);
+
+      ctx.beginPath();
+      ctx.moveTo(utils.bound(poly[0].x, thickness/2, this.width-thickness/2), utils.bound(poly[0].y, thickness/2, this.height-thickness/2));
+      for(let i = 1; i < poly.length; ++i){
+        ctx.lineTo(utils.bound(poly[i].x, thickness/2, this.width-thickness/2), utils.bound(poly[i].y, thickness/2, this.height-thickness/2));
+      }
+      ctx.closePath();
+      ctx.stroke();
+      poly.forEach(p => square(p.x, p.y));
+      
+    },
+
+    redraw(emit = true){
+      window.test = this;
+      if(this.throttle) return;
+    
       this.xVideoRatio = this.$refs.videoPlayer.videoWidth/this.$refs.videoPlayer.clientWidth;
       this.yVideoRatio = this.$refs.videoPlayer.videoHeight/this.$refs.videoPlayer.clientHeight;
+      this.ctx.restore();
+      this.ctx.save();
+      this.ctx.fillStyle = "rgba(0, 0, 0, 0)";
+      this.ctx.clearRect(0, 0, this.width, this.height);
+
+      if(this.currentPolygonMask){
+        this.ctx.clip(this.currentPolygonPath2D);
+      }
       this.ctx.drawImage(this.$refs.videoPlayer, this.oleft*this.xVideoRatio, this.otop*this.yVideoRatio, 
         this.width*this.xVideoRatio, this.height*this.yVideoRatio, 
         0, 0, this.width, this.height
       );
-      this.emitter.emit('post_redraw' + this.targetData.id)
+      if(!this.dragMode && this.currentPolygonMask){
+        this.drawPolyOutline(this.ctx, this.currentPolygonMask);
+      }
+      
+      if(emit) this.emitter.emit('post_redraw' + this.targetData.id)
       this.processFrame();
+  
+      this.throttle = true;
+      setTimeout(() => this.throttle=false, 20);
     },
 
     processFrame(){
@@ -507,8 +661,8 @@ export default {
       .sort((a, b) => a.width * a.height > b.width * b.height)                                               //sort by area
       .filter((rect, i, rects) => !rects.slice(i+1).some((r)=>isOverlapped(r, rect)))                        // filter out overlapping rects
       .filter(rect => Math.abs(this.width - rect.width) > 100 && Math.abs(this.height - rect.height) > 100)  // filter out rects that try and crop too much of the screen out
-      .map(rect => ({left: rect.x, top: rect.y, right: rect.x + rect.width, bottom: rect.y + rect.height}));
-      
+      .map(utils.rectToPoly);
+
       this.cutRegions(rects);
   
       src.delete(); contours.delete(); hierarchy.delete();
@@ -518,23 +672,23 @@ export default {
     DeleteHoverCanvas(){
       const idx = this.$parent.videoTargets.findIndex(vt => vt.id == this.hoverMapping[this.current_state.id].id);
       if(idx >= 0) this.$parent.videoTargets.splice(idx, 1);
-      console.log('deleting');
     },
   },
 
   mounted(){
-    if(this.targetData.startupFn) this.targetData.startupFn(this);
+    
     if(this.targetData.start_state)  this.current_state = this.targetData.start_state;
     
     const self = this;    
     this.ctx = this.$refs.canvas.getContext('2d');
+    this.ctx.save();
 
     this.width = this.targetData.end.x - this.targetData.start.x;
     this.height = this.targetData.end.y - this.targetData.start.y;
 
     this.$refs.canvas.width = this.width;
     this.$refs.canvas.height = this.height;
-    
+
     this.oleft = this.targetData.start.x;
     this.otop = this.targetData.start.y;
 
@@ -545,6 +699,20 @@ export default {
     this.player.ready(function(){
       this.on('timeupdate', () => self.redraw());
     });
+    
+    if(this.current_state){
+      this.changeState(this.current_state, 0, false);
+      const clipRegion = new Path2D();
+      clipRegion.rect(0, 0, this.width, this.height);
+      this.polygonMasks[this.current_state.id] = [
+        {x: 0, y: 0},
+        {x: this.width, y: 0},
+        {x: this.width, y: this.height},
+        {x: 0, y: this.height}
+      ];
+    }
+    
+    if(this.targetData.startupFn) this.targetData.startupFn(this);
     
     this.emitter.on('clearSelection', ()=>{
       this.dragging = false;
@@ -558,7 +726,7 @@ export default {
     this.selected = true;
     this.$parent.currVideoCanvasSelected = this;
     
-    if(this.current_state) this.changeState(this.current_state, 0, false);
+    
   },
 
   beforeUnmount(){

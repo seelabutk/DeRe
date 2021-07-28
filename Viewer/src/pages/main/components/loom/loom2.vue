@@ -437,6 +437,8 @@ export default {
       this.regionSelect = !this.regionSelect;
       this.$refs.helpToggle.checked = false;
       this.hintHelpState = false;
+      this.$refs.SelectMode.checked = false;
+      this.dragMode = true;
     },
 
     inputSearch(e){
