@@ -10,6 +10,12 @@ export default {
   components: {
     MainPage,
   },
+  created(){
+    window.addEventListener('mousemove', e => {
+      document.body.style.cursor = 'default';
+      this.emitter.emit('mousemove', e);
+    });
+  }
 };
 
 </script>

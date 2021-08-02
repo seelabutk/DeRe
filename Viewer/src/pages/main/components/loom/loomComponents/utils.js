@@ -66,8 +66,8 @@ function polyToPath2D(poly){
 }
 
 function polyToPolyString(poly, minX, minY){
-  if(!minX) minX = Math.min(...poly.map(p => p.x));
-  if(!minY) minY = Math.min(...poly.map(p => p.y));
+  if(minX === undefined) minX = Math.min(...poly.map(p => p.x));
+  if(minY === undefined) minY = Math.min(...poly.map(p => p.y));
   let polyString = ''
   poly.forEach((p, i) => {
     polyString += p.x - minX + "," + (p.y - minY);
@@ -87,6 +87,10 @@ function rectToPoly(rect){
 
 function bound(v, min, max){
   return Math.min(Math.max(min, v), max);
+}
+
+function dist(a, b){
+  return Math.sqrt(Math.pow(b.x - a.x, 2) + Math.pow(b.y - a.y, 2));
 }
 
 function sleep(ms) {
@@ -118,6 +122,7 @@ export default {
   polyToPolyString,
   rectToPoly,
   bound,
+  dist,
   sleep,
   throttle,
 }

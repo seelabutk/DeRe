@@ -566,8 +566,6 @@ export default {
         return;
       }
       const vts = JSON.parse(localStorage.getItem(loadName));
-
-      console.log(vts);
       
       this.renderMode = vts['renderMode'];
       this.current_state = vts['current_state'];
@@ -604,7 +602,6 @@ export default {
     paste(){
       if(this.pasteBin) {
         const fn = this.pasteBin.startupFn;
-        console.log(this.pasteBin);
         const copy = JSON.parse(JSON.stringify(this.pasteBin)); //utils.deepCopy(this.pasteBin); //todo: vue complains about enumerating keys on components here
         copy.startupFn = (c) => { c.updateParentCurrentState = false; if(fn) c.fn(c);}
         copy.id = copy.id + '_copy';
