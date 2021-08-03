@@ -1,18 +1,6 @@
 <template>
   <div ref="container" style="height: 0px; width: 0px;">
 
-    <video 
-      ref="videoPlayer" 
-      class="video-js" 
-      :style="{
-        position: 'absolute',
-        top: '0px',
-        left: '0px',
-        width:  width + 'px',
-        height: height + 'px',
-        visibility: 'hidden',
-      }"
-    />
     <!-- positioning of canvas, cutouts, components !-->
     <div
       :style="{
@@ -31,7 +19,6 @@
         @click="dragging=false"
         @mousedown="onVideoMouseDown"
         @mouseleave="dragging=false"
-        @mouseup="onVideoMouseUp"
       />
       <!-- drag selection !-->
       <div :style="dragSelectStyle"/>
@@ -68,13 +55,13 @@
       <svg 
         v-for="(cutout,id) in targetData.cutouts"
         :key="id"
-        :width="cutout.width"
-        :height="cutout.height"
+        :width="width"
+        :height="height"
         :style="{
-          width: cutout.width,
-          height: cutout.height,
-          top: cutout.top,
-          left: cutout.left,
+          width: width,
+          height: height,
+          top: top,
+          left: left,
           position: 'absolute',
           fill: 'black',
         }"
@@ -98,11 +85,6 @@
 
 // TODO: get rid of $parent stuff, pass through events via loomVideoCanvas in loom.vue
 // TODO: attempt to put all hoverCanvas logic into loomHover.vue?
-
-// TODO: fix weird boundary cutting glitch
-// TODO: expand draggable regions beyond bounding box of original canvas
-// TODO: get rid of top/left start/end targetData options and rely purely on masks
-
 
 import utils from './utils.js'
 
@@ -229,6 +211,9 @@ export default {
     },
 
     setupVideo(element){
+      const p = videojs.getPlayer(element);
+      if(p) return p;
+
       let videoOptions = {
         sources: [{
           src: this.$parent.directory + '/' + this.$parent.video_filename,
@@ -251,7 +236,7 @@ export default {
 
     changeStateWithFrameNo(frame, offset = 0, changeParent = true){
       if(changeParent && this.updateParentCurrentState) this.$parent.changeStateWithFrameNo(frame, offset);
-      this.current_state = this.targetData.targets[frame];
+      this.current_state = this.targetData.targets[frame];;
       let img = null;
 
       if(this.current_state && this.current_state.actor == "hover" && !this.hoverMapping[this.current_state.id]){
@@ -330,7 +315,12 @@ export default {
     cutSelectedRegion(){
       if(this.dragStart.x > this.dragCurr.x)  [this.dragStart.x, this.dragCurr.x] = [this.dragCurr.x, this.dragStart.x];
       if(this.dragStart.y > this.dragCurr.y)  [this.dragStart.y, this.dragCurr.y] = [this.dragCurr.y, this.dragStart.y];
-      const rect = utils.rectToPoly({...this.dragStart, width: this.dragCurr.x - this.dragStart.x, height: this.dragCurr.y - this.dragStart.y})
+      const rect = utils.rectToPoly({
+        x: this.dragStart.x,
+        y: this.dragStart.y,
+        width: this.dragCurr.x - this.dragStart.x, 
+        height: this.dragCurr.y - this.dragStart.y
+      });
       this.cutRegions(rect);
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
     },
@@ -370,6 +360,8 @@ export default {
         this.$parent.videoTargets.push({
           id,
           region,
+          top: this.top,
+          left: this.left,
           makeCutout: cutout,
           parentCanvas: this,
           cutouts: [],
@@ -451,7 +443,7 @@ export default {
       const cidx = pcutouts.findIndex(c => c.id == this.targetData.id);
       if(cidx >= 0){
         const newCutout = pcutouts[cidx];
-        newCutout.poly = utils.polyToPolyString(this.currentPolygonMask);
+        newCutout.poly = utils.polyToPolyString(this.currentPolygonMask, 0, 0);
         pcutouts.splice(cidx, 1, newCutout);
       }
       this.redraw(false);
@@ -585,8 +577,8 @@ export default {
     redraw(emit = true){
       if(this.throttle) return;
     
-      this.xVideoRatio = this.$refs.videoPlayer.videoWidth/this.$refs.videoPlayer.clientWidth;
-      this.yVideoRatio = this.$refs.videoPlayer.videoHeight/this.$refs.videoPlayer.clientHeight;
+      this.xVideoRatio = this.videoPlayer.videoWidth/this.videoPlayer.clientWidth;
+      this.yVideoRatio = this.videoPlayer.videoHeight/this.videoPlayer.clientHeight;
       this.ctx.restore();
       this.ctx.save();
       this.ctx.fillStyle = "rgba(0, 0, 0, 0)";
@@ -595,7 +587,7 @@ export default {
       if(this.currentPolygonMask){
         this.ctx.clip(this.currentPolygonPath2D);
       }
-      this.ctx.drawImage(this.$refs.videoPlayer, 0, 0, 
+      this.ctx.drawImage(this.videoPlayer, 0, 0, 
         this.width*this.xVideoRatio, this.height*this.yVideoRatio, 
         0, 0, this.width, this.height
       );
@@ -679,58 +671,73 @@ export default {
     this.top =  this.targetData.top || 0;
     this.left = this.targetData.left || 0;
 
-    this.player = this.setupVideo(this.$refs.videoPlayer);
-    this.player.ready(function(){
-      this.on('timeupdate', () => self.redraw());
-    });
-    
-    if(this.current_state){
-      this.changeState(this.current_state, 0, false);
-      if(this.targetData.region){
-        this.polygonMasks[this.current_state.id] = this.targetData.region;
-      } else {
-        this.polygonMasks[this.current_state.id] = [
-          {x: 0, y: 0},
-          {x: this.width, y: 0},
-          {x: this.width, y: this.height},
-          {x: 0, y: this.height}
-        ];
-      }
-      if(this.targetData.makeCutout && this.targetData.parentCanvas){
-        const region = this.polygonMasks[this.current_state.id];
-        const minX = Math.min(...region.map(p => p.x));
-        const maxX = Math.max(...region.map(p => p.x));
-        const minY = Math.min(...region.map(p => p.y));
-        const maxY = Math.max(...region.map(p => p.y));
-        const pcutouts = this.targetData.parentCanvas.targetData.cutouts;
-        pcutouts.push({
-          poly: utils.polyToPolyString(this.currentPolygonMask),
-          width: maxX-minX,
-          height: maxY-minY,
-          top: minY,
-          left: minX,
-          id: this.targetData.id,
-        });
-        this.redraw(false);
-      }
-    } else {
-      console.warn("No Current State!");
+    if(!this.targetData.videoPlayerLink){
+      this.targetData.videoPlayerLink = this.targetData.id;
+      this.$parent.createNewVideoPlayer(this.targetData.videoPlayerLink);
     }
     
-    if(this.targetData.startupFn) this.targetData.startupFn(this);
-    
-    this.emitter.on('clearSelection', this.clearSelection);
-    this.emitter.on('deselect', this.deselect);
-    this.emitter.on(`changeState-${this.targetData.id}`, this.changeState);
-    this.emitter.on('mousemove', this.onVideoMouseMove);
+    //nextTick ensures the videoTarget reference will be created by the time this code runs
+    this.$nextTick(()=>{
+      
+      this.videoPlayer = this.$parent.$refs[`videoPlayer${this.targetData.videoPlayerLink}`];
+      if(!this.videoPlayer){
+        console.error("Error, videoPlayer not yet created!");
+      }
 
-    this.selected = true;
-    this.$parent.currVideoCanvasSelected = this;
+      this.player = this.setupVideo(this.videoPlayer);
+      this.player.ready(function(){
+        this.on('timeupdate', () => self.redraw());
+      });
+      
+      if(this.current_state){
+        this.changeState(this.current_state, 0, false);
+        if(this.targetData.region){
+          this.polygonMasks[this.current_state.id] = this.targetData.region;
+        } else {
+          this.polygonMasks[this.current_state.id] = [
+            {x: 0, y: 0},
+            {x: this.width, y: 0},
+            {x: this.width, y: this.height},
+            {x: 0, y: this.height}
+          ];
+        }
+        if(this.targetData.makeCutout && this.targetData.parentCanvas){
+          const region = this.polygonMasks[this.current_state.id];
+          const minX = Math.min(...region.map(p => p.x));
+          const maxX = Math.max(...region.map(p => p.x));
+          const minY = Math.min(...region.map(p => p.y));
+          const maxY = Math.max(...region.map(p => p.y));
+          const pcutouts = this.targetData.parentCanvas.targetData.cutouts;
+          pcutouts.push({
+            poly: utils.polyToPolyString(this.currentPolygonMask, 0, 0),
+            width: maxX-minX,
+            height: maxY-minY,
+            top: minY,
+            left: minX,
+            id: this.targetData.id,
+          });
+          this.redraw(false);
+        }
+      } else {
+        console.warn("No Current State!");
+      }
+      
+      if(this.targetData.startupFn) this.targetData.startupFn(this);
+      
+      this.emitter.on('clearSelection', this.clearSelection);
+      this.emitter.on('deselect', this.deselect);
+      this.emitter.on(`changeState-${this.targetData.id}`, this.changeState);
+      this.emitter.on('mousemove', this.onVideoMouseMove);
+      this.emitter.on('mouseup', this.onVideoMouseUp);
+
+      this.selected = true;
+      this.$parent.currVideoCanvasSelected = this;
+    });
   },
 
   beforeUnmount(){
     //delete cutouts
-    if(this.targetData.parentCanvas){
+    if(this.targetData.parentCanvas && this.targetData.parentCanvas.targetData){
       const id = this.targetData.parentCanvas.targetData.cutouts.findIndex(c => c.id == this.targetData.id);
       if(id >= 0) this.targetData.parentCanvas.targetData.cutouts.splice(id, 1);
     }
@@ -738,14 +745,12 @@ export default {
     this.targetData.top = this.top;
     this.targetData.left = this.left;
 
-    //free resources
-    if (this.player) this.player.dispose();
-
     //delete event listeners
     this.emitter.off('clearSelection', this.clearSelection);
     this.emitter.off('deselect', this.deselect);
     this.emitter.off(`changeState-${this.targetData.id}`, this.changeState);
     this.emitter.off('mousemove', this.onVideoMouseMove);
+    this.emitter.off('mouseup', this.onVideoMouseUp);
   },
   
 }

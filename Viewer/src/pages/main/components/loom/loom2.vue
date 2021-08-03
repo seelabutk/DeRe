@@ -7,6 +7,18 @@
       outline: regionSelect ? 'dashed white' : 'none',
     }"
   >
+    <!-- global list of video tags!-->
+    <video 
+      v-for="(val, key) in videoPlayers"
+      :key="key"
+      :ref="`videoPlayer${val.id}`"
+      :style="{
+        width:  currentConfig ? currentConfig.window.width  + 'px' : '0px',
+        height: currentConfig ? currentConfig.window.height + 'px' : '0px',
+      }"
+      class="video-js" 
+      style="position: absolute; top: 0px; left: 0px; visibility: hidden;"
+    />
     <loom-video-canvas
       v-for="videoTarget in videoTargets"
       :key="videoTarget.id"
@@ -186,6 +198,7 @@ export default {
     transformedTargetCache: {},
     //video
     videoTargetCache: {},
+    videoPlayers: [],
     //history
     confidence: 5,
     interactionHistory: [],
@@ -500,8 +513,6 @@ export default {
     newVideoTarget(obj){
       const nvt = {
         id: this.current_state.id,
-        start: {x: 0, y: 0},
-        end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
         cutouts: [],
         targets: utils.deepCopy(this.targets),
         parentCanvas: true,
@@ -511,17 +522,21 @@ export default {
       return nvt;
     },
 
+    createNewVideoPlayer(id, obj={}){
+      this.videoPlayers.push({id, ...obj});
+    },
+
     videoCacheModeChange(mode){
       if(!this.videoTargetCache.hasOwnProperty(mode)){
         this.videoTargetCache[mode] = {
           '-1': [{
             id: -1,
-            start: {x: 0, y: 0},
-            end: {x: this.currentConfig.window.width, y: this.currentConfig.window.height},
+            videoPlayerLink: '-1',
             cutouts: [],
             targets: utils.deepCopy(this.targets),
-          }]
+          }],
         };
+        this.videoPlayers.push({id: '-1'});
       }
     },
 

@@ -15,6 +15,10 @@ export default {
       document.body.style.cursor = 'default';
       this.emitter.emit('mousemove', e);
     });
+    window.addEventListener('mouseup', e => {
+      document.body.style.cursor = 'default';
+      this.emitter.emit('mouseup', e);
+    });
   }
 };
 
