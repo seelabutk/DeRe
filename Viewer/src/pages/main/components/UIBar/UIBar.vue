@@ -5,7 +5,7 @@
 </template>
 
 <script>
-import { onMounted, watch, getCurrentInstance } from 'vue'
+import { ref, onMounted, watch, getCurrentInstance } from 'vue'
 import { GridStack } from 'gridstack'
 import 'gridstack/dist/gridstack.min.css'
 import 'gridstack/dist/gridstack-extra.min.css'
@@ -14,29 +14,81 @@ import 'gridstack/dist/jq/gridstack-dd-jqueryui' // to get legacy jquery-ui drag
 
 export default {
   name: 'UIBar',
-  props: ['items'],
   components: {},
 
   setup(props, context){
     let grid = null;
-    
+    const items = ref([]);
+    const confidence = 5;
     const app = getCurrentInstance(); //to access globalProperties (emitter)
-    watch(()=>props.items, (propItems) => {
 
-      let items = propItems.map((item, i) => ({
-        ...item, 
-        id: i, 
-        w: 1,
-        h: 1,
-      }));
-      grid.removeAll();
-      items.forEach(item => {
-        let widget = grid.addWidget(item);
-        widget.addEventListener('click', e => { //not very vue-like cuz gridstack sucks.
-          app.appContext.config.globalProperties.emitter.emit(`changeState-${item.vc}`, item.target);
-        });
+    const runInteractionAnalysis = function(interactionHistory){
+      let {order, interactions} = calcMostFrequentInteractions(interactionHistory);
+      
+      order = order.filter(k => interactions[k].frames.length > 1); //filter out all single-buttons
+      order = order.filter((k, i) => {
+        let lastFrame = interactions[k].frames[interactions[k].frames.length-1];
+        return !order.slice(0, i).some((e)=> lastFrame == interactions[e].frames[interactions[e].frames.length-1]);
+      }); //filter out all interactions that end with the same frame (same result)
+      
+      order = order.filter(k => {
+        let lastFrame = interactions[k].frames[interactions[k].frames.length-1];
+        return !items.value.some(s => lastFrame == s.id);
+      }); //filter out previously added elements      
+
+      for(let i=0, j=0; i < order.length && j < 30; ++i){ //choose 30 most relevant elements
+        let interaction = interactions[order[i]];
+
+        if(interaction.n >= confidence){ //confidence of at least 5 occurrences
+          ++j;
+
+          let target = interaction.targets[interaction.targets.length-1];
+
+          let vc = interaction.vc;
+          items.value = items.value.concat({
+            id: target.frame_no,
+            content: target.name,
+            target,
+            vc,
+          });
+        }
+      }
+    };
+
+    const calcMostFrequentInteractions = function(interactionHistory){
+      let n = interactionHistory.length;
+      let m = {};
+
+      for(let i = 0; i < n; ++i){
+        let ss = [];
+        let s = '';
+        for(let j = i; j < n; ++j){
+          
+          const {id} = interactionHistory[j];
+          const vc = interactionHistory[j].videoCanvas;
+          ss.push(id);
+          s += '-' + String(id);
+
+          if (m[s] == undefined) m[s] = { frames: [], n: 0, vc };
+
+          m[s].frames = [...ss]; //clone
+          m[s].targets = m[s].frames.map(s => interactionHistory.find(i => i.id == s).target);
+          m[s].n++;
+        }
+      }
+
+      const ids = Object.keys(m);
+      ids.sort((a,b) => {
+        if(m[a].n > m[b].n)  return -1;
+        else if (m[a].n == m[b].n && m[a].frames.length > m[b].frames.length) return -1;
+        else return 1;
       });
-    });
+
+      return {
+        order: ids,
+        interactions: m,
+      };
+    };
 
     onMounted(() => {
       grid = GridStack.init({
@@ -58,10 +110,32 @@ export default {
           console.log('change! ', item);
         })
       }); */
+
+      app.appContext.config.globalProperties.emitter.on('getShortcutItems', () => items );
+      app.appContext.config.globalProperties.emitter.on('createShortcutItem', (item) => items.push(item) );
+      app.appContext.config.globalProperties.emitter.on('runInteractionAnalysis', runInteractionAnalysis );
+    });
+
+    watch(items, (vitems) => {
+      grid.removeAll();
+      vitems.map((item, i) => ({
+        w: 1,
+        h: 1,
+        ...item, 
+        id: i,
+      })).forEach(item => {
+        let widget = grid.addWidget(item);
+        widget.addEventListener('click', e => { //not very vue-like cuz gridstack sucks.
+          app.appContext.config.globalProperties.emitter.emit(`changeState-${item.vc}`, item.target);
+        });
+      });
     });
 
     return {
       grid,
+      items,
+      runInteractionAnalysis,
+      confidence,
     };
   }
 }

@@ -54,6 +54,8 @@ function findUiBarTargets(config){
         const child1 = groups[i][0];
         const child2 = groups[j][k];
 
+        if(!child1 || !child2)  continue;
+
         if(
           (loomConfig.mobile && loomConfig.mobile.spatialTransform && loomConfig.mobile.spatialTransform.horizontal_buttons_to_dropdown && 
            Math.abs(child1.shape.dimensions.centerY - child2.shape.dimensions.centerY) <= deltaY && //horizontal

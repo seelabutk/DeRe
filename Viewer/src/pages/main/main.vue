@@ -1,29 +1,23 @@
 <template>
   <div id="container">
-    <UIBar 
-      :items="items"
-    />
-    <loom2
-      directory="/apps/tableau"
-      :shortcuts="items"
-      @add-shortcut="items = items.concat($event)"
-    />
+    <u-i-bar/>
+    <loom-manager :directories=directories />
   </div>
 </template>
 
 <script>
 import UIBar from './components/UIBar/UIBar.vue'
-import Loom2 from './components/loom/loom2.vue'
+import loomManager from './components/loom/loomManager.vue'
 
 export default {
   name: 'MainPage',
   components: {
     UIBar,
-    Loom2,
+    loomManager,
   },
   data: function(){
     return {
-      items: [],
+      directories: ['/apps/tableau', '/apps/nytimes'],
     };
   },
 }

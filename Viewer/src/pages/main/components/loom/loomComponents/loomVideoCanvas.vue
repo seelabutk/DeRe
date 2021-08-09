@@ -44,7 +44,7 @@
           :is="getComponent(target)" 
           :ref="'target' + target.id"
           :targetData="target"
-          :showHint="$parent.hintHelpState"
+          :showHint="overlay"
           :interactable="!regionSelect"
           @change-state="changeState"
           @add-history="addHistory"
@@ -60,8 +60,8 @@
         :style="{
           width: width,
           height: height,
-          top: top,
-          left: left,
+          top: otop,
+          left: oleft,
           position: 'absolute',
           fill: 'black',
         }"
@@ -86,6 +86,8 @@
 // TODO: get rid of $parent stuff, pass through events via loomVideoCanvas in loom.vue
 // TODO: attempt to put all hoverCanvas logic into loomHover.vue?
 
+// TODO: resizing, editing black cutout regions (moving, polygon, etc)
+
 import utils from './utils.js'
 
 import videojs from 'video.js'
@@ -102,7 +104,7 @@ export default {
   name: 'loomVideoCanvas',
   emits: ['frame_processed'],
 
-  props: ['regionSelect', 'overlay', 'renderMode', 'currentConfig', 'start_state_id', 'dragMode', 'targetData'],
+  props: ['regionSelect', 'overlay', 'renderMode', 'dragMode', 'currentConfig', 'start_state_id', 'targetData', 'loomID'],
   components: {
     loomTarget,
     loomButton,
@@ -142,7 +144,7 @@ export default {
 
   computed: {
     targets(){ return this.targetData.targets; },
-    currentTargets(){ return utils.currentTargets(this.current_state, this.targetData.targets); },
+    currentTargets(){ return utils.currentTargets(this.current_state, this.targets); },
     currentPolygonMask(){ 
       let cs;
       for(cs = this.current_state; cs && !this.polygonMasks[cs.id]; cs = utils.findByName(cs.parent, this.targets))
@@ -236,7 +238,7 @@ export default {
 
     changeStateWithFrameNo(frame, offset = 0, changeParent = true){
       if(changeParent && this.updateParentCurrentState) this.$parent.changeStateWithFrameNo(frame, offset);
-      this.current_state = this.targetData.targets[frame];;
+      this.current_state = this.targets[frame];
       let img = null;
 
       if(this.current_state && this.current_state.actor == "hover" && !this.hoverMapping[this.current_state.id]){
@@ -255,15 +257,19 @@ export default {
           this.emitter.on('post_redraw' + this.targetData.id, r);
         })).then(() => {
           let rect = null;
+
           if(!this.hoverMapping[this.current_state.rect]){
             const newImg = cv.imread(this.$refs.canvas);
             rect = this.compareImages(img, newImg);
-            this.hoverMapping[this.current_state.id].rect = rect;
+            if(rect)  this.hoverMapping[this.current_state.id].rect = rect;
           } else {
             rect = this.hoverMapping[this.current_state.id].rect;
           }
-          rect = utils.rectToPoly(rect);
-          this.cutRegions(rect, false, false, true);
+
+          if(rect){
+            rect = utils.rectToPoly(rect);
+            this.cutRegions(rect, false, false, true);
+          }
         });
       }
     },
@@ -307,7 +313,8 @@ export default {
         .sort((a, b) => dist(a, this.mouseLoc) - dist(b, this.mouseLoc));                 //sort by distance to mouse
 
       const rect = rects[0];
-      return { left: rect.x, top: rect.y, right: rect.x + rect.width, bottom: rect.y + rect.height };
+      if(rect) return { left: rect.x, top: rect.y, right: rect.x + rect.width, bottom: rect.y + rect.height };
+      else return null;
     },
 
     addHistory(t, e){ this.$parent.updateInteractionHistory(t, e, this.targetData.id); },
@@ -353,10 +360,6 @@ export default {
           this.hoverMapping[this.current_state.id].id = id;
         }
 
-        let targets = {};
-        if(copyUI)  targets = this.dupCurrentRegionTargets(region);
-        if(Object.keys(targets).length == 0) targets = {[this.current_state.frame_no]: this.targets[this.current_state.frame_no]};
-
         this.$parent.videoTargets.push({
           id,
           region,
@@ -365,7 +368,7 @@ export default {
           makeCutout: cutout,
           parentCanvas: this,
           cutouts: [],
-          targets,
+          targets: copyUI ? this.targets : [],
           startupFn: c => {
             c.current_state = this.current_state;
             c.emitter.emit('deselect');
@@ -375,54 +378,6 @@ export default {
           processed: true,
         });
       });
-    },
-
-
-    //TODO: this will just lessen data duplication, but not required for functionality
-    regionInBoundary(region, boundary){
-      return true;
-    },
-
-    dupCurrentRegionTargets(region){
-      let targets = {};
-      let parents = {};
-
-      Object.entries(this.targets).forEach(([key, target]) => {
-        if(target.name == "root") return;
-        if(this.regionInBoundary(target)) targets[key] = target;
-      });
-
-      Object.values(targets).forEach(target => {
-        let parent = {...utils.findByName(target.parent, this.targets)}; //shallow copy
-        if(!parents[parent.frame_no]){  //add parents
-          if(typeof parent.frame_no == 'string' && parent.frame_no.includes('frameless')){
-            //custom frameless html elements such as dropdown
-            //todo: maybe resize?
-            parent.children.forEach(c => {
-              if(!parents[c.frame_no]) parents[c.frame_no] = c;
-            });
-          } else {
-            parent.hide = true;
-          } 
-          parents[parent.frame_no] = parent;
-        }
-        const grandparent = utils.findByName(parent.parent, this.targets);
-        if(grandparent){
-          if(!parents[grandparent.frame_no]){ //add grandparent for future parent sibling traversal
-            grandparent.hide = true;
-            parents[grandparent.frame_no] = grandparent;
-          }
-          grandparent.children.forEach(sibling => { //add parent siblings
-            if(!parents[sibling.frame_no]){
-              sibling.hide = true;
-              parents[sibling.frame_no] = sibling;
-            }
-          });
-        }
-      });
-      targets = {...targets, ...parents};
-
-      return targets;
     },
 
     resizePolygon(e){
@@ -439,6 +394,8 @@ export default {
         return;
       }
       this.currentPolygonMask[c] = e;
+
+      if(!this.targetData.parentCanvas || !this.targetData.parentCanvas.targetData.cutouts)  return;
       const pcutouts = this.targetData.parentCanvas.targetData.cutouts;
       const cidx = pcutouts.findIndex(c => c.id == this.targetData.id);
       if(cidx >= 0){
@@ -539,7 +496,7 @@ export default {
       }
       this.emitter.emit('deselect');
       this.selected = true;
-      this.$parent.currVideoCanvasSelected = this;
+      this.emitter.emit("selectVideoCanvas", this);
       this.dragging = this.regionSelect;
       return false;
     },
@@ -667,9 +624,14 @@ export default {
 
     this.$refs.canvas.width = this.width;
     this.$refs.canvas.height = this.height;
+    
+    this.id = this.targetData.id
 
     this.top =  this.targetData.top || 0;
     this.left = this.targetData.left || 0;
+
+    this.otop = this.top;
+    this.oleft = this.left;
 
     if(!this.targetData.videoPlayerLink){
       this.targetData.videoPlayerLink = this.targetData.id;
@@ -731,7 +693,7 @@ export default {
       this.emitter.on('mouseup', this.onVideoMouseUp);
 
       this.selected = true;
-      this.$parent.currVideoCanvasSelected = this;
+      this.emitter.emit("selectVideoCanvas", this);
     });
   },
 
