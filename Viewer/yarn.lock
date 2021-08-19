@@ -166,6 +166,11 @@
   resolved "https://registry.yarnpkg.com/@vue/shared/-/shared-3.0.11.tgz#20d22dd0da7d358bb21c17f9bde8628152642c77"
   integrity sha512-b+zB8A2so8eCE0JsxjL24J7vdGl8rzPQ09hZNhystm+KqSbKcAej1A+Hbva1rCMmTTqA+hFnUSDc5kouEo0JzA==
 
+"@vueform/multiselect@^2.1.2":
+  version "2.1.2"
+  resolved "https://registry.yarnpkg.com/@vueform/multiselect/-/multiselect-2.1.2.tgz#1e183e356c0feea00f868800124b35eb3598a9f5"
+  integrity sha512-iiMc7EmvCJ64zE1hChOfJloX3z0DrO05gucTjYXkJ03C0+Kh6wXB6Re9fnmC1ErsFBRBqS45J5H7HakpNE1zgQ==
+
 aes-decrypter@3.1.2:
   version "3.1.2"
   resolved "https://registry.yarnpkg.com/aes-decrypter/-/aes-decrypter-3.1.2.tgz#3545546f8e9f6b878640339a242efe221ba7a7cb"

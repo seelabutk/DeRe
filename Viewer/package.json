@@ -8,6 +8,10 @@
     "serve": "vite preview"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^1.2.35",
+    "@fortawesome/free-solid-svg-icons": "^5.15.3",
+    "@fortawesome/vue-fontawesome": "^3.0.0-4",
+    "@vueform/multiselect": "^2.1.2",
     "fuse.js": "^6.4.6",
     "gridstack": "^4.2.3",
     "jquery": "^3.6.0",
@@ -16,10 +20,7 @@
     "mitt": "^2.1.0",
     "polygon-clipping": "^0.15.3",
     "video.js": "^7.11.8",
-    "vue": "^3.0.5",
-    "@fortawesome/fontawesome-svg-core": "^1.2.35",
-    "@fortawesome/free-solid-svg-icons": "^5.15.3",
-    "@fortawesome/vue-fontawesome": "^3.0.0-4"
+    "vue": "^3.0.5"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^1.2.2",

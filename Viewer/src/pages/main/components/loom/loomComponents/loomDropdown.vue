@@ -1,5 +1,9 @@
 <template>
-  <select @change='onChange' :style="calcStyle">
+  <select 
+    ref="dropdown" 
+    @change='onChange' 
+    :style="calcStyle"
+  >
     <option v-for="option in targetData.children"
       :key="option.id"
     >
@@ -20,6 +24,9 @@ export default {
       this.$emit('addHistory', targetData, e)
     },
   },
+  mounted(){
+    this.$refs.dropdown.value=this.current_state.name;
+  }
 }
 </script>
 

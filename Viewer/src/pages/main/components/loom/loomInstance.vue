@@ -26,7 +26,7 @@
       :targetData="videoTarget"
       :regionSelect="regionSelect"
       :overlay="overlay"
-      :renderMode="renderMode"
+      :renderMode="renderAppMode"
       :currentConfig="currentConfig"
       :start_state_id="current_state.id"
       :dragMode="dragMode"
@@ -38,21 +38,19 @@
 <script>
 import videojs from 'video.js'
 import 'video.js/dist/video-js.min.css'
-import Fuse from 'fuse.js'
+
 
 import loomConfig from './loomConfig.json'
 import transformMode from './transforms.js'
 import loomVideoCanvas from './loomComponents/loomVideoCanvas.vue'
 import utils from './loomComponents/utils.js'
 
-//todo: brushing backwards in loomBrushingBox component
-
 //ability to open multiple apps and combine them
 //auto-generate app based on user interaction
   // create new "Mode" with generated ui
 
 export default {
-  name: 'Loom2',
+  name: 'LoomInstance',
   components: {
     loomVideoCanvas
   },
@@ -75,9 +73,6 @@ export default {
     overlay: {
       type: Boolean,
     }, 
-    renderMode: {
-      type: String,
-    },
     dragMode: {
       type: Boolean,
     },
@@ -91,6 +86,8 @@ export default {
     config: null,
     currentConfig: null,
     current_state: null,
+    loaded: false,
+    renderAppMode: null,
     //targets
     targets: {},
     targetCount: 0,
@@ -105,11 +102,16 @@ export default {
 
   computed: {
     videoTargets: function(){
-      if(!this.current_state || !this.videoTargetCache[this.renderMode]) return null;
+      if(!this.current_state || !this.videoTargetCache[this.renderAppMode]) return null;
       for(let cs = this.current_state; cs; cs = utils.findByName(cs.parent, this.targets)){
-        const vts = Object.entries(this.videoTargetCache[this.renderMode]);
+        if(typeof cs.frame_no === "string" && cs.frame_no.includes("frameless")){
+          cs = utils.findByName(cs.parent, this.targets); //skip frameless states
+        }
+        const vts = Object.entries(this.videoTargetCache[this.renderAppMode]);
         for(let i = 0; i < vts.length; ++i)
-          if(cs.id == vts[i][0])  return vts[i][1];
+          if(String(cs.id) === vts[i][0]){
+            return vts[i][1];
+          }
       }
       console.error("No encompassing loom canvas found!");
       return null;
@@ -117,9 +119,7 @@ export default {
   },
 
   methods: {
-
     setupVideo(element){
-
       let videoOptions = {
         sources: [{
           src: this.directory + '/' + this.video_filename,
@@ -142,7 +142,8 @@ export default {
       });      
       return config;
     },
-    load(){
+    load(renderMode){
+      if(this.loaded) return Promise.resolve();
       return fetch(this.directory + '/' + this.config_filename)
         .then(response => response.text())
         .then(config => JSON.parse(config))
@@ -158,23 +159,30 @@ export default {
             console.error('ERROR, out of version config file, run Recorder/convert.py');
             return;
           }
+          this.config = config;
+          this.currentConfig = this.config.hasOwnProperty(this.renderAppMode) ? this.config[this.renderAppMode] : this.config[renderMode];
+          this.loaded = true;
 
-          this.config = config
-          this.currentConfig = this.config[this.renderMode];
-          this.targetCacheModeChange(this.renderMode);
+          this.transformedTargetCache['hidden'] = {};
+          this.videoTargetCache['hidden'] = {};
         }).then(() => {
           //TODO: save/load videoTargetModes
         });
     },
 
-    init(mode){
-      this.targetCacheModeChange(mode);
-      this.targets = this.transformedTargetCache[mode];
-      this.currentConfig = this.config[mode];
-      this.current_state = this.targets[1];
-      this.videoCacheModeChange(mode);
-      this.changeState(this.current_state);
-      this.$parent.drawMiniMap(this.current_state, this.targets);
+    init(m){
+      this.renderAppMode = `${m.value}_${m.renderMode}`;
+      return this.load(m.renderMode).then(()=>{
+        if(!m.selected){
+          this.renderAppMode = 'hidden';
+        }
+        this.targetCacheModeChange(this.renderAppMode, m.renderMode);
+        this.targets = this.transformedTargetCache[this.renderAppMode];
+        this.current_state = this.targets[1];
+        this.videoCacheModeChange(this.renderAppMode);
+        this.changeState(this.current_state);
+        this.$parent.drawMiniMap(this.current_state, this.targets);
+      });
     },
 
     traverse(target){
@@ -205,6 +213,7 @@ export default {
     },
     
     changeState(target, offset = 0){
+      if(target === undefined)  return;
       this.changeStateWithFrameNo(target.frame_no, offset);
     }, 
 
@@ -233,11 +242,11 @@ export default {
       if(targetComponent) targetComponent.highlight();
     },
 
-    targetCacheModeChange(mode){
+    targetCacheModeChange(mode, transform){
       if(!this.transformedTargetCache.hasOwnProperty(mode)){
-        const configCopy = utils.deepCopy(this.currentConfig);
-        if(!this.config.hasOwnProperty(mode))
-          this.config[mode] = transformMode(configCopy, Object.values(this.config)[0], mode);
+        if(!this.config.hasOwnProperty(mode)){
+          this.config[mode] = transformMode(utils.deepCopy(this.currentConfig), Object.values(this.config)[0], transform);
+        }
         this.targetCount = 0;
         this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
         this.transformedTargetCache[mode][0] = this.config[mode];
@@ -252,7 +261,7 @@ export default {
         parentCanvas: true,
         ...obj
       };
-      this.videoTargetCache[this.renderMode][this.current_state.id] = [nvt];
+      this.videoTargetCache[this.renderAppMode][this.current_state.id] = [nvt];
       return nvt;
     },
 
@@ -274,11 +283,14 @@ export default {
       }
     },
 
-    Delete(currVideoCanvasSelected){
-      if(currVideoCanvasSelected){
-        const id = this.videoTargets.findIndex(vt => String(vt.id) == currVideoCanvasSelected.id);
-        this.videoTargets.splice(id, 1);
-      }
+    Delete(videoCanvas){
+      let id = null;
+      if(videoCanvas === null && this.videoTargets !== null) {
+        id = this.videoTargets.findIndex(vt => String(vt.id) == '-1');
+      }else if(videoCanvas){
+        id = this.videoTargets.findIndex(vt => String(vt.id) == videoCanvas.id);
+      } 
+      if(id !== null)  this.videoTargets.splice(id, 1);
     },
     paste(pasteBin){
       if(pasteBin) {
@@ -290,13 +302,6 @@ export default {
       }
     },
 
-  },
-  mounted(){
-    window.vue = this;
-    this.load().then(() => {
-      this.init(this.renderMode);
-    });
-    
   },
 }
 </script>

@@ -46,6 +46,7 @@
           :targetData="target"
           :showHint="overlay"
           :interactable="!regionSelect"
+          :current_state="current_state"
           @change-state="changeState"
           @add-history="addHistory"
           @onmouseleave="DeleteHoverCanvas"
@@ -237,6 +238,7 @@ export default {
     }, 
 
     changeStateWithFrameNo(frame, offset = 0, changeParent = true){
+
       if(changeParent && this.updateParentCurrentState) this.$parent.changeStateWithFrameNo(frame, offset);
       this.current_state = this.targets[frame];
       let img = null;
@@ -256,6 +258,7 @@ export default {
         (new Promise(r => { // wait for frame change
           this.emitter.on('post_redraw' + this.targetData.id, r);
         })).then(() => {
+          if(!this.$refs.canvas)  return;
           let rect = null;
 
           if(!this.hoverMapping[this.current_state.rect]){
@@ -349,6 +352,8 @@ export default {
         });
         return;
       }
+
+      console.log()
 
       if(regions.length > 0 && regions[0].constructor !== Array) regions = [regions];
       regions.forEach((region, i) => {
@@ -560,7 +565,7 @@ export default {
     },
 
     processFrame(){
-      if(this.targetData.processed) return;
+      if(this.targetData.processed || !this.$refs.canvas) return;
 
       const src = cv.imread(this.$refs.canvas);
       

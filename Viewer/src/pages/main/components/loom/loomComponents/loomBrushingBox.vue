@@ -25,6 +25,8 @@
 </template>
 
 <script>
+//todo: brushing backwards
+
 import mixin from './loomBase'
 export default {
   name: 'loomBrushingBox',

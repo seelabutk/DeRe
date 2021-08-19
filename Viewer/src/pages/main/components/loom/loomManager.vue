@@ -10,10 +10,25 @@
       </div>
 
       <span class="text">Mode</span>
-      <select name="device" ref="renderMode" @change="e => onDeviceChange(e.target.value)">
-        <option value="desktop">Desktop</option>
-        <option value="mobile">Mobile</option>
-      </select>
+      <multiselect
+        ref="renderMode" 
+        v-model="renderMode"
+        mode="single"
+        :canDeselect="false"
+        :canClear="false"
+        :options="renderModes"
+        @change="onRenderModeChange"
+      />
+      <br>
+
+      <span class="text">App</span>
+      <multiselect 
+        ref="appMode"
+        v-model="appMode" 
+        mode="multiple" 
+        :options="appModes"
+        @change="onAppModeChange"
+      />
 
       <span class="text">Regions:</span>
       <input 
@@ -139,12 +154,18 @@
 </template>
 
 <script>
+import Fuse from 'fuse.js'
+import Multiselect from '@vueform/multiselect'
+
 import utils from './loomComponents/utils.js'
 import loomInstance from './loomInstance.vue'
 
 export default {
 
-  components: {loomInstance},
+  components: {
+    loomInstance, 
+    Multiselect
+  },
   props: {
     directories: {
       type: Array,
@@ -153,7 +174,10 @@ export default {
 
   data: function(){
     return {
+      appModes: [],
+      appMode: null,
       renderMode: null,
+      renderModes: [],
       regionSelect: false,
       hintHelpState: false,
       dragMode: true,
@@ -173,7 +197,7 @@ export default {
       return {
         position: 'absolute',
         width: this.loomMenuWidth,
-        height: '500px',
+        height: 'auto',
         top: '150px',
         left: '0px',
       };
@@ -197,7 +221,7 @@ export default {
           cursor: 'pointer',
         };
       }
-    }
+    },
   },
 
   watch: {
@@ -207,13 +231,12 @@ export default {
   },
 
   methods: {
-
-    init(mode){
-      for(let i = 0; i < this.directories.length; ++i){
-        this.$refs[`loomInstace-${i}`].init(mode);
-      }
-
-      //todo: divide into different renderModes by default
+    init(){
+      const apps = this.appModes.map(am => ({selected: this.appMode.includes(am.value), ...am}));
+      apps.forEach((app,i) => {
+        const renderApp = {...app, renderMode: this.renderMode};
+        this.$refs[`loomInstace-${i}`].init(renderApp);
+      });
     },
 
     newVideoTarget(obj=null){
@@ -221,6 +244,7 @@ export default {
     },
 
     drawMiniMap(current_state, targets){
+      return;
       const canvas = this.$refs.miniMap;
       const width = this.loomMenuWidth - 20;
       const ratio = 10;
@@ -299,10 +323,14 @@ export default {
       this.regionSelect = false;
     },
 
-    onDeviceChange(v){
-      const mode = v;
-      this.init(mode);
-      this.renderMode = mode
+    onRenderModeChange(v){
+      this.renderMode = v;
+      this.init();
+    },
+
+    onAppModeChange(v){
+      this.appMode = v;
+      this.init();
     },
 
     saveVideoCanvasState(){
@@ -315,7 +343,7 @@ export default {
 
       const vts = JSON.parse(JSON.stringify(this.videoTargetCache));//utils.deepCopy(this.videoTargetCache); - maximum call stack exceeded?
       vts['current_state'] = this.current_state;
-      vts['renderMode'] = this.renderMode;
+      vts['appMode'] = this.appMode;
 
       try{
         localStorage.setItem(name, JSON.stringify(vts));
@@ -340,13 +368,12 @@ export default {
         return;
       }
       const vts = JSON.parse(localStorage.getItem(loadName));
-      
-      this.renderMode = vts['renderMode'];
+  
       this.current_state = vts['current_state'];
-      delete vts['renderMode'];
+      delete vts['appMode'];
       delete vts['current_state'];
       this.videoTargetCache = vts;
-      this.init(this.renderMode);
+      this.init(this.appMode);
     },
 
     linkVideoCanvas(){
@@ -384,17 +411,37 @@ export default {
   },
 
   mounted(){
-    this.renderMode = this.$refs.renderMode.value;
     this.emitter.on("regionExists", e => {
       this.regionExists = e.exists;
       this.regionOrigin = e.origin;
     });
 
     this.emitter.on("selectVideoCanvas", vc => this.currVideoCanvasSelected = vc );
+    
+    this.directories.forEach(d => {
+      let appName = d.split('/');
+      appName = appName[appName.length-1];
+      this.appModes.push({
+        label: appName.charAt(0).toUpperCase() + appName.slice(1),
+        value: appName,
+      });
+    });
+    this.appMode = this.appModes[0].value;
+    
+    ['Desktop', 'Mobile'].forEach(d => this.renderModes.push({
+      value: d.toLowerCase(), 
+      label: d,
+    }));
+    this.renderMode = this.renderModes[0].value;
+    
+    this.$refs.appMode.select(this.appMode);
+    this.$refs.renderMode.select(this.renderMode);
   }
 
 }
 </script>
+
+<style src="@vueform/multiselect/themes/default.css"></style>
 
 <style scoped>
 #loom-menu {
