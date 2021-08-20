@@ -21,7 +21,7 @@
     />
     <loom-video-canvas
       v-for="videoTarget in videoTargets"
-      :key="videoTarget.id"
+      :key="`${renderAppMode}_${videoTarget.id}`"
       :loomID="id"
       :targetData="videoTarget"
       :regionSelect="regionSelect"
@@ -255,7 +255,7 @@ export default {
     
     newVideoTarget(obj){
       const nvt = {
-        id: this.current_state.id,
+        id: String(this.current_state.id),
         cutouts: [],
         targets: this.targets,
         parentCanvas: true,
@@ -273,7 +273,7 @@ export default {
       if(!this.videoTargetCache.hasOwnProperty(mode)){
         this.videoTargetCache[mode] = {
           '-1': [{
-            id: -1,
+            id: '-1',
             videoPlayerLink: '-1',
             cutouts: [],
             targets: this.targets,

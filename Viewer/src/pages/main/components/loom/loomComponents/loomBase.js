@@ -1,6 +1,6 @@
 
 const mixin = {
-  props: ['targetData', 'showHint', 'interactable', 'current_state'],
+  props: ['parent', 'targetData', 'showHint', 'interactable', 'current_state'],
   emits: ['changeState', 'addHistory'],
   data: function(){
     return {

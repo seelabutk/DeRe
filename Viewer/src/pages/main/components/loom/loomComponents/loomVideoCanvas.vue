@@ -631,7 +631,7 @@ export default {
     this.$refs.canvas.height = this.height;
     
     this.id = this.targetData.id
-
+    
     this.top =  this.targetData.top || 0;
     this.left = this.targetData.left || 0;
 

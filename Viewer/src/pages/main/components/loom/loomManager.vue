@@ -19,7 +19,6 @@
         :options="renderModes"
         @change="onRenderModeChange"
       />
-      <br>
 
       <span class="text">App</span>
       <multiselect 
@@ -411,13 +410,15 @@ export default {
   },
 
   mounted(){
+    //set up events
     this.emitter.on("regionExists", e => {
       this.regionExists = e.exists;
       this.regionOrigin = e.origin;
     });
-
     this.emitter.on("selectVideoCanvas", vc => this.currVideoCanvasSelected = vc );
     
+    
+    //set up initial render and app modes
     this.directories.forEach(d => {
       let appName = d.split('/');
       appName = appName[appName.length-1];
@@ -434,8 +435,21 @@ export default {
     }));
     this.renderMode = this.renderModes[0].value;
     
+    //add new mode selector
+    this.renderModes.push({ 
+      label: 'New',
+      value: 'new'
+    });
+
+    //these cause re-renderings because of stupid @change event, unecessary
     this.$refs.appMode.select(this.appMode);
-    this.$refs.renderMode.select(this.renderMode);
+    this.$refs.renderMode.select(this.renderMode); 
+
+    //auxilary renderModes
+    this.renderModes.push({
+      label: 'Custom',
+      value: 'custom',
+    });
   }
 
 }
