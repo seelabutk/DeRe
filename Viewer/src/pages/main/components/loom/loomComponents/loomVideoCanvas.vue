@@ -86,7 +86,6 @@
 
 // TODO: get rid of $parent stuff, pass through events via loomVideoCanvas in loom.vue
 // TODO: attempt to put all hoverCanvas logic into loomHover.vue?
-
 // TODO: resizing, editing black cutout regions (moving, polygon, etc)
 
 import utils from './utils.js'
@@ -127,8 +126,6 @@ export default {
       top: 0,
       width: 0,
       height: 0,
-      xVideoRatio: 0,
-      yVideoRatio: 0,
       ctx: null,
       current_state: Object.values(this.targetData.targets).find(t => t.id == this.start_state_id) || Object.values(this.targetData.targets)[1],
       
@@ -138,7 +135,6 @@ export default {
 
       updateParentCurrentState: true,
       lastFrame: null,
-      fps: 30,
       throttle: false,
     };
   },
@@ -213,26 +209,6 @@ export default {
       return undefined;//loomTarget
     },
 
-    setupVideo(element){
-      const p = videojs.getPlayer(element);
-      if(p) return p;
-
-      let videoOptions = {
-        sources: [{
-          src: this.$parent.directory + '/' + this.$parent.video_filename,
-          type: 'video/mp4',
-        }],
-        controls: false,
-        loadingSpinner: false,
-        controlBar: false,
-      };
-      return videojs(element, videoOptions, function() {  
-        this.on("click", function(ev) {
-            ev.preventDefault();
-        });
-      });
-    },
-
     changeState(target, offset = 0, changeParent = true){
       this.changeStateWithFrameNo(target.frame_no, offset, changeParent);
     }, 
@@ -251,7 +227,7 @@ export default {
       const actualFrame = frame + 1 + offset;
       if(this.lastFrame == actualFrame) return;
 
-      this.player.currentTime(actualFrame/this.fps);
+      this.$parent.changeVideoFrame(this.id, actualFrame)
       this.lastFrame = actualFrame;
 
       if(img !== null && !this.targetData.processed){
@@ -395,7 +371,7 @@ export default {
       || utils.dist(this.currentPolygonMask[c], this.currentPolygonMask[pidx]) < minD){
         this.currentPolygonMask.splice(c, 1);
         this.resizePolygonMode = false;
-        this.redraw(false);
+        this.redraw();
         return;
       }
       this.currentPolygonMask[c] = e;
@@ -408,14 +384,14 @@ export default {
         newCutout.poly = utils.polyToPolyString(this.currentPolygonMask, 0, 0);
         pcutouts.splice(cidx, 1, newCutout);
       }
-      this.redraw(false);
+      this.redraw();
     },
 
     addNewVertex(vertIdx, e){
       this.currentPolygonMask.splice(vertIdx+1, 0, e);
       this.resizePolygonMode = true;
       this.polygonResizeIdx = vertIdx+1;
-      this.redraw(false);
+      this.redraw();
     },
 
     isPolygonVertexHovered(e){
@@ -491,7 +467,7 @@ export default {
       const newVertex = this.isPolygonLineHovered(this.mouseLoc);
       if(newVertex >= 0 && resizePoly < 0){  
         this.addNewVertex(newVertex, this.mouseLoc);
-        this.redraw(false);
+        this.redraw();
       }
 
       if(!this.dragMode){
@@ -536,11 +512,16 @@ export default {
       
     },
 
-    redraw(emit = true){
-      if(this.throttle) return;
+    redraw(emit=false){
+      this.$parent.changeVideoFrame(this.id, this.lastFrame, emit);
+    },
+
+    draw(videoPlayer, emit = true){
+      if(this.throttle || !videoPlayer) return;
     
-      this.xVideoRatio = this.videoPlayer.videoWidth/this.videoPlayer.clientWidth;
-      this.yVideoRatio = this.videoPlayer.videoHeight/this.videoPlayer.clientHeight;
+      const xVideoRatio = videoPlayer.videoWidth/videoPlayer.clientWidth;
+      const yVideoRatio = videoPlayer.videoHeight/videoPlayer.clientHeight;
+
       this.ctx.restore();
       this.ctx.save();
       this.ctx.fillStyle = "rgba(0, 0, 0, 0)";
@@ -549,8 +530,8 @@ export default {
       if(this.currentPolygonMask){
         this.ctx.clip(this.currentPolygonPath2D);
       }
-      this.ctx.drawImage(this.videoPlayer, 0, 0, 
-        this.width*this.xVideoRatio, this.height*this.yVideoRatio, 
+      this.ctx.drawImage(videoPlayer, 0, 0, 
+        this.width*xVideoRatio, this.height*yVideoRatio, 
         0, 0, this.width, this.height
       );
       if(!this.dragMode && this.currentPolygonMask){
@@ -638,23 +619,8 @@ export default {
     this.otop = this.top;
     this.oleft = this.left;
 
-    if(!this.targetData.videoPlayerLink){
-      this.targetData.videoPlayerLink = this.targetData.id;
-      this.$parent.createNewVideoPlayer(this.targetData.videoPlayerLink);
-    }
-    
     //nextTick ensures the videoTarget reference will be created by the time this code runs
     this.$nextTick(()=>{
-      
-      this.videoPlayer = this.$parent.$refs[`videoPlayer${this.targetData.videoPlayerLink}`];
-      if(!this.videoPlayer){
-        console.error("Error, videoPlayer not yet created!");
-      }
-
-      this.player = this.setupVideo(this.videoPlayer);
-      this.player.ready(function(){
-        this.on('timeupdate', () => self.redraw());
-      });
       
       if(this.current_state){
         this.changeState(this.current_state, 0, false);
@@ -683,7 +649,8 @@ export default {
             left: minX,
             id: this.targetData.id,
           });
-          this.redraw(false);
+
+          this.redraw();
         }
       } else {
         console.warn("No Current State!");

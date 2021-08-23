@@ -22,6 +22,7 @@
     <loom-video-canvas
       v-for="videoTarget in videoTargets"
       :key="`${renderAppMode}_${videoTarget.id}`"
+      :ref="`loomVideoCanvas-${videoTarget.id}`"
       :loomID="id"
       :targetData="videoTarget"
       :regionSelect="regionSelect"
@@ -44,10 +45,8 @@ import loomConfig from './loomConfig.json'
 import transformMode from './transforms.js'
 import loomVideoCanvas from './loomComponents/loomVideoCanvas.vue'
 import utils from './loomComponents/utils.js'
-
-//ability to open multiple apps and combine them
-//auto-generate app based on user interaction
-  // create new "Mode" with generated ui
+// TODOs: 
+// auto-generate app based on user interaction
 
 export default {
   name: 'LoomInstance',
@@ -98,6 +97,11 @@ export default {
     //history
     interactionHistory: [],
     maxHistoryLength: 100,
+
+
+    numVideoPlayers: 3,
+    lastUsedVideoPlayer: 0,
+    fps: 30,
   }),
 
   computed: {
@@ -119,7 +123,11 @@ export default {
   },
 
   methods: {
+
     setupVideo(element){
+      const p = videojs.getPlayer(element);
+      if(p) return p;
+
       let videoOptions = {
         sources: [{
           src: this.directory + '/' + this.video_filename,
@@ -135,6 +143,7 @@ export default {
         });
       });
     },
+
     parentify(config){
       config.children.forEach(child => {
         child.parent_id = config.id;
@@ -142,6 +151,7 @@ export default {
       });      
       return config;
     },
+
     load(renderMode){
       if(this.loaded) return Promise.resolve();
       return fetch(this.directory + '/' + this.config_filename)
@@ -165,8 +175,6 @@ export default {
 
           this.transformedTargetCache['hidden'] = {};
           this.videoTargetCache['hidden'] = {};
-        }).then(() => {
-          //TODO: save/load videoTargetModes
         });
     },
 
@@ -265,21 +273,53 @@ export default {
       return nvt;
     },
 
-    createNewVideoPlayer(id, obj={}){
-      this.videoPlayers.push({id, ...obj});
+
+    changeVideoFrame(videoCanvasID, frameNo, emit=true){
+      const vp = this.videoPlayers[this.lastUsedVideoPlayer];
+      this.lastUsedVideoPlayer = (this.lastUsedVideoPlayer+1)%this.numVideoPlayers;
+      const self = this;
+
+      //TODO: 
+      let resolve;
+      new Promise((res) => {
+        resolve = res;
+        if(!vp.inUse) {
+          resolve(vp);
+        }
+      }).then((vp)=>{
+        vp.player.on('timeupdate', function timeUpdate(){
+          const vpEl = self.$refs[`videoPlayer${vp.id}`];
+          self.$refs[`loomVideoCanvas-${videoCanvasID}`].draw(vpEl, emit);
+          vp.player.off('timeupdate', timeUpdate);
+          if(vp.inUse)  resolve();
+          vp.inUse = false;
+        });
+        
+        vp.inUse = true;
+        vp.player.currentTime(frameNo/this.fps);
+      });
+    },
+
+    createNewVideoPlayer(id){
+      const vp = {id};
+      this.videoPlayers.push(vp);
+      this.$nextTick(()=>{
+        const player = this.setupVideo(this.$refs[`videoPlayer${id}`]);
+        vp.player = player;
+      });
+      
     },
 
     videoCacheModeChange(mode){
       if(!this.videoTargetCache.hasOwnProperty(mode)){
+        //create "root", -1 == root
         this.videoTargetCache[mode] = {
           '-1': [{
             id: '-1',
-            videoPlayerLink: '-1',
             cutouts: [],
             targets: this.targets,
           }],
         };
-        this.videoPlayers.push({id: '-1'});
       }
     },
 
@@ -295,7 +335,7 @@ export default {
     paste(pasteBin){
       if(pasteBin) {
         const fn = pasteBin.startupFn;
-        const copy = JSON.parse(JSON.stringify(pasteBin)); //utils.deepCopy(this.pasteBin); //todo: vue complains about enumerating keys on components here
+        const copy = JSON.parse(JSON.stringify(pasteBin)); //utils.deepCopy(this.pasteBin); //TODO: vue complains about enumerating keys on components here
         copy.startupFn = (c) => { c.updateParentCurrentState = false; if(fn) c.fn(c);}
         copy.id = copy.id + '_copy';
         this.videoTargets.push(copy);
@@ -303,6 +343,12 @@ export default {
     },
 
   },
+
+  mounted(){
+    for(let i = 0; i < this.numVideoPlayers; ++i){
+      this.createNewVideoPlayer(i);
+    }
+  }
 }
 </script>
 

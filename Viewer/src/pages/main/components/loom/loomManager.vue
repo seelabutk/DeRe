@@ -231,7 +231,7 @@ export default {
 
   methods: {
     init(){
-      const apps = this.appModes.map(am => ({selected: this.appMode.includes(am.value), ...am}));
+      const apps = this.appModes.map(am => ({selected: this.appMode.includes(am.value), ...am})).slice(0,this.directories.length);
       apps.forEach((app,i) => {
         const renderApp = {...app, renderMode: this.renderMode};
         this.$refs[`loomInstace-${i}`].init(renderApp);
@@ -435,18 +435,18 @@ export default {
     }));
     this.renderMode = this.renderModes[0].value;
     
+    //these cause re-renderings because of stupid @change event, unecessary
+    this.$refs.appMode.select(this.appMode);
+    this.$refs.renderMode.select(this.renderMode); 
+    
     //add new mode selector
-    this.renderModes.push({ 
+    this.appModes.push({ 
       label: 'New',
       value: 'new'
     });
 
-    //these cause re-renderings because of stupid @change event, unecessary
-    this.$refs.appMode.select(this.appMode);
-    this.$refs.renderMode.select(this.renderMode); 
-
     //auxilary renderModes
-    this.renderModes.push({
+    this.appModes.push({
       label: 'Custom',
       value: 'custom',
     });
