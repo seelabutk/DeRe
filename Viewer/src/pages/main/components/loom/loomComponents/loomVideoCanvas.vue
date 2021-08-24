@@ -329,8 +329,6 @@ export default {
         return;
       }
 
-      console.log()
-
       if(regions.length > 0 && regions[0].constructor !== Array) regions = [regions];
       regions.forEach((region, i) => {
 
@@ -513,7 +511,8 @@ export default {
     },
 
     redraw(emit=false){
-      this.$parent.changeVideoFrame(this.id, this.lastFrame, emit);
+      this.emitter.emit('changeVideoFrame', this.loomID, this.id, this.lastFrame, emit);
+      //this.$parent.changeVideoFrame(this.id, this.lastFrame, emit);
     },
 
     draw(videoPlayer, emit = true){

@@ -21,7 +21,7 @@
     />
     <loom-video-canvas
       v-for="videoTarget in videoTargets"
-      :key="`${renderAppMode}_${videoTarget.id}`"
+      :key="`${renderAppMode}-${videoTarget.id}`"
       :ref="`loomVideoCanvas-${videoTarget.id}`"
       :loomID="id"
       :targetData="videoTarget"
@@ -76,7 +76,7 @@ export default {
       type: Boolean,
     },
     id: {
-      type: Number,
+      type: String,
     }
   },
 
@@ -289,7 +289,9 @@ export default {
       }).then((vp)=>{
         vp.player.on('timeupdate', function timeUpdate(){
           const vpEl = self.$refs[`videoPlayer${vp.id}`];
-          self.$refs[`loomVideoCanvas-${videoCanvasID}`].draw(vpEl, emit);
+          if(!vpEl) return;
+          if(self.$refs[`loomVideoCanvas-${videoCanvasID}`])
+            self.$refs[`loomVideoCanvas-${videoCanvasID}`].draw(vpEl, emit);
           vp.player.off('timeupdate', timeUpdate);
           if(vp.inUse)  resolve();
           vp.inUse = false;
@@ -305,7 +307,10 @@ export default {
       this.videoPlayers.push(vp);
       this.$nextTick(()=>{
         const player = this.setupVideo(this.$refs[`videoPlayer${id}`]);
-        vp.player = player;
+        if(player) 
+          vp.player = player;
+        else
+          console.error("No Player!");
       });
       
     },

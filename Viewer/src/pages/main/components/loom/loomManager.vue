@@ -24,8 +24,11 @@
       <multiselect 
         ref="appMode"
         v-model="appMode" 
-        mode="multiple" 
+        mode="tags" 
         :options="appModes"
+        :searchable="true"
+        :createTag="true"
+        @tag="addNewMode"
         @change="onAppModeChange"
       />
 
@@ -139,7 +142,7 @@
       <loom-instance
         v-for="(directory, key) in directories"
         :key="key"
-        :id="key"
+        :id="`loomInstance-${key}`"
         :ref="`loomInstace-${key}`"
         :directory=directory
         :regionSelect="regionSelect"
@@ -173,6 +176,7 @@ export default {
 
   data: function(){
     return {
+      //state
       appModes: [],
       appMode: null,
       renderMode: null,
@@ -180,14 +184,15 @@ export default {
       regionSelect: false,
       hintHelpState: false,
       dragMode: true,
-
-      loomMenuWidth: 120,
       regionExists: false,
       regionOrigin: null,
       currVideoCanvasSelected: null,
       pasteBin: null,
       linkMode: 'none',
       searchResults: [],
+      linkedCanvases: {},
+      //settings
+      loomMenuWidth: 120,
     };
   },
 
@@ -234,12 +239,14 @@ export default {
       const apps = this.appModes.map(am => ({selected: this.appMode.includes(am.value), ...am})).slice(0,this.directories.length);
       apps.forEach((app,i) => {
         const renderApp = {...app, renderMode: this.renderMode};
-        this.$refs[`loomInstace-${i}`].init(renderApp);
+        if(this.$refs[`loomInstace-${i}`])
+          this.$refs[`loomInstace-${i}`].init(renderApp);
       });
     },
 
     newVideoTarget(obj=null){
-      this.$refs[`loomInstace-${this.currVideoCanvasSelected.id}`].newVideoTarget(obj);
+      if(this.$refs[`loomInstace-${this.currVideoCanvasSelected.id}`])
+        this.$refs[`loomInstace-${this.currVideoCanvasSelected.id}`].newVideoTarget(obj);
     },
 
     drawMiniMap(current_state, targets){
@@ -376,9 +383,12 @@ export default {
     },
 
     linkVideoCanvas(){
-      if(!this.currVideoCanvasSelected)
+      if(!this.currVideoCanvasSelected){
+        this.linkMode = 'none';
         return;
-      else if(this.linkMode == 'selectable'){
+      };
+
+      if(this.linkMode == 'selectable'){
         this.linkMode = 'linking';
         return;
       }
@@ -387,8 +397,27 @@ export default {
         return;
       }
     },
+
+    changeVideoFrame(instance, id, lastFrame, emit){
+      if(this.linkedCanvases[instance]){
+        this.linkedCanvases[instance].forEach(cid => {
+          if(this.$refs[`loomInstance-${cid}`])
+            this.$refs[`loomInstance-${cid}`].changeVideoFrame(id, lastFrame, emit);
+        });
+      } else {
+        if(this.$refs[`loomInstance-${instance}`])
+          this.$refs[`loomInstance-${instance}`].changeVideoFrame(id, lastFrame, emit);
+      }
+    },
+
+    addNewMode(mode){
+      console.log('mode: ', mode);
+      console.log('TODO'); // TODO;
+    },
+
     Delete(){
-      this.$refs[`loomInstace-${this.currVideoCanvasSelected.loomID}`].Delete(this.currVideoCanvasSelected);
+      if(this.$refs[`loomInstace-${this.currVideoCanvasSelected.loomID}`])
+        this.$refs[`loomInstace-${this.currVideoCanvasSelected.loomID}`].Delete(this.currVideoCanvasSelected);
     },
     copy(){
       this.pasteBin = this.currVideoCanvasSelected;
@@ -405,7 +434,8 @@ export default {
       this.pasteBin = pasteBin;
     },
     paste(){
-      this.$refs[`loomInstace-${this.pasteBin.loomID}`].paste(this.pasteBin.targetData);
+      if(this.$refs[`loomInstace-${this.pasteBin.loomID}`])
+        this.$refs[`loomInstace-${this.pasteBin.loomID}`].paste(this.pasteBin.targetData);
     },
   },
 
@@ -416,6 +446,7 @@ export default {
       this.regionOrigin = e.origin;
     });
     this.emitter.on("selectVideoCanvas", vc => this.currVideoCanvasSelected = vc );
+    this.emitter.on('changeVideoFrame', this.changeVideoFrame);
     
     
     //set up initial render and app modes
@@ -438,18 +469,6 @@ export default {
     //these cause re-renderings because of stupid @change event, unecessary
     this.$refs.appMode.select(this.appMode);
     this.$refs.renderMode.select(this.renderMode); 
-    
-    //add new mode selector
-    this.appModes.push({ 
-      label: 'New',
-      value: 'new'
-    });
-
-    //auxilary renderModes
-    this.appModes.push({
-      label: 'Custom',
-      value: 'custom',
-    });
   }
 
 }
