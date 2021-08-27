@@ -279,31 +279,42 @@ export default {
       this.lastUsedVideoPlayer = (this.lastUsedVideoPlayer+1)%this.numVideoPlayers;
       const self = this;
 
-      //TODO: 
-      let resolve;
-      new Promise((res) => {
-        resolve = res;
-        if(!vp.inUse) {
-          resolve(vp);
+      new Promise((res, rej) => {
+        vp.promises.push(res);
+        if(!vp.inUse){
+          res(res);
         }
-      }).then((vp)=>{
+        setTimeout(() => rej(res), 500);
+      }).then(resolve => {
+        const pi = vp.promises.findIndex(res => res == resolve);
+
         vp.player.on('timeupdate', function timeUpdate(){
           const vpEl = self.$refs[`videoPlayer${vp.id}`];
           if(!vpEl) return;
+
           if(self.$refs[`loomVideoCanvas-${videoCanvasID}`])
             self.$refs[`loomVideoCanvas-${videoCanvasID}`].draw(vpEl, emit);
           vp.player.off('timeupdate', timeUpdate);
-          if(vp.inUse)  resolve();
+
+          if(vp.promises[pi+1]) {
+            vp.promises[pi+1](vp.promises[pi+1]);
+          }
+          
           vp.inUse = false;
+          vp.promises.splice(pi, 1);
         });
         
         vp.inUse = true;
         vp.player.currentTime(frameNo/this.fps);
+      }).catch(resolve => {
+        const pi = vp.promises.findIndex(res => res == resolve);
+        vp.promises.splice(pi, 1);
+        console.warn("frame took too long");
       });
     },
 
     createNewVideoPlayer(id){
-      const vp = {id};
+      const vp = {id, promises: []};
       this.videoPlayers.push(vp);
       this.$nextTick(()=>{
         const player = this.setupVideo(this.$refs[`videoPlayer${id}`]);
