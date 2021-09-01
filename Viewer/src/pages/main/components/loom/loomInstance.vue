@@ -43,10 +43,8 @@ import 'video.js/dist/video-js.min.css'
 
 import loomConfig from './loomConfig.json'
 import transformMode from './transforms.js'
-import loomVideoCanvas from './loomComponents/loomVideoCanvas.vue'
+import loomVideoCanvas from './loomVideoCanvas.vue'
 import utils from './loomComponents/utils.js'
-// TODOs: 
-// auto-generate app based on user interaction
 
 export default {
   name: 'LoomInstance',

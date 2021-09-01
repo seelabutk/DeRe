@@ -162,6 +162,9 @@ import Multiselect from '@vueform/multiselect'
 import utils from './loomComponents/utils.js'
 import loomInstance from './loomInstance.vue'
 
+// TODOs: 
+// auto-generate app based on user interaction
+
 export default {
 
   components: {

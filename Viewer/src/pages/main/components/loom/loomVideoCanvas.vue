@@ -88,17 +88,17 @@
 // TODO: attempt to put all hoverCanvas logic into loomHover.vue?
 // TODO: resizing, editing black cutout regions (moving, polygon, etc)
 
-import utils from './utils.js'
+import utils from './loomComponents/utils.js'
 
 import videojs from 'video.js'
 import 'video.js/dist/video-js.min.css'
 
-import loomConfig from '../loomConfig.json'
-import loomBrushingBox from './loomBrushingBox.vue'
-import loomButton from './loomButton.vue'
-import loomTarget from './loomTarget.vue'
-import loomHover from './loomHover.vue'
-import loomDropdown from './loomDropdown.vue'
+import loomConfig from './loomConfig.json'
+import loomBrushingBox from './loomComponents/loomBrushingBox.vue'
+import loomButton from './loomComponents/loomButton.vue'
+import loomTarget from './loomComponents/loomTarget.vue'
+import loomHover from './loomComponents/loomHover.vue'
+import loomDropdown from './loomComponents/loomDropdown.vue'
 
 export default {
   name: 'loomVideoCanvas',

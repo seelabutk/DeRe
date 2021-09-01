@@ -103,7 +103,6 @@ function traverseMobile(config){
   //transform rows of buttons into mobile-friendly dropdown
   const uiBarTargets = findUiBarTargets(config);
   uiBarTargets.forEach(group => {
-    //console.log(group);
     const nconfig = {}
     nconfig.actor = 'dropdown';
     nconfig.type = 'linear';
