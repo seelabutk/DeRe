@@ -206,6 +206,7 @@ export default {
       //defaults
       if(this.$options.components[loomObjectName])
         return this.$options.components[loomObjectName];
+
       return undefined;//loomTarget
     },
 
@@ -599,8 +600,7 @@ export default {
 
   mounted(){
     if(this.targetData.start_state)  this.current_state = this.targetData.start_state;
-    
-    const self = this;    
+
     this.ctx = this.$refs.canvas.getContext('2d');
     this.ctx.save();
 

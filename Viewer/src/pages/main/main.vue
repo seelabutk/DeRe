@@ -17,7 +17,7 @@ export default {
   },
   data: function(){
     return {
-      directories: ['/apps/tableau', '/apps/nytimes'],
+      directories: ['/apps/tableau'],
     };
   },
 }

@@ -24,17 +24,16 @@ const mixin = {
         leftOffset,
         polyString = "";
       
-      let minX = this.targetData.shape.dimensions.min_x;
-      let minY = this.targetData.shape.dimensions.min_y;
-      let maxX = this.targetData.shape.dimensions.max_x;
-      let maxY = this.targetData.shape.dimensions.max_y;
+      let minX = target.shape.dimensions.min_x;
+      let minY = target.shape.dimensions.min_y;
+      let maxX = target.shape.dimensions.max_x;
+      let maxY = target.shape.dimensions.max_y;
 
-      for (let i = 0; i < target.shape.points.length; i++) {
-        let x = target.shape.points[i].x;
-        let y = target.shape.points[i].y;
-        polyString += x - minX + "," + (y - minY);
-        if (i !== target.shape.points.length - 1) polyString += " ";
-      }
+      const len = Object.keys(target.shape.points).length;
+      Object.values(target.shape.points).forEach((p, i) => {
+        polyString += p.x - minX + "," + (p.y - minY);
+        if (i !== len - 1) polyString += " ";
+      });
 
       w = maxX - minX;
       h = maxY - minY;

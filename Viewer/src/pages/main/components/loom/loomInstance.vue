@@ -86,7 +86,6 @@ export default {
     loaded: false,
     renderAppMode: null,
     //targets
-    targets: {},
     targetCount: 0,
     transformedTargetCache: {},
     //video
@@ -103,6 +102,9 @@ export default {
   }),
 
   computed: {
+    targets: function(){
+      return {...this.transformedTargetCache['original'], ...this.transformedTargetCache[this.renderAppMode]};
+    },
     videoTargets: function(){
       if(!this.current_state || !this.videoTargetCache[this.renderAppMode]) return null;
       for(let cs = this.current_state; cs; cs = utils.findByName(cs.parent, this.targets)){
@@ -110,13 +112,13 @@ export default {
           cs = utils.findByName(cs.parent, this.targets); //skip frameless states
         }
         const vts = Object.entries(this.videoTargetCache[this.renderAppMode]);
-        for(let i = 0; i < vts.length; ++i)
+        for(let i = 0; i < vts.length; ++i){
           if(String(cs.id) === vts[i][0]){
             return vts[i][1];
           }
+        }
       }
-      console.error("No encompassing loom canvas found!");
-      return null;
+      return this.videoTargetCache[this.renderAppMode]['-1'];   //return root
     },
   },
 
@@ -143,7 +145,7 @@ export default {
     },
 
     parentify(config){
-      config.children.forEach(child => {
+      Object.values(config.children).forEach(child => {
         child.parent_id = config.id;
         if(child.hasOwnProperty('children') && child.children.length > 0) this.parentify(child);
       });      
@@ -162,17 +164,18 @@ export default {
           });
           return config
         }).then(config => {
-          
           if(config['version'] != loomConfig['version']){
             console.error('ERROR, out of version config file, run Recorder/convert.py');
             return;
           }
           this.config = config;
-          this.currentConfig = this.config.hasOwnProperty(this.renderAppMode) ? this.config[this.renderAppMode] : this.config[renderMode];
+          this.currentConfig = this.config.hasOwnProperty(this.renderAppMode) ? this.config[this.renderAppMode] : this.config['original'];
           this.loaded = true;
 
           this.transformedTargetCache['hidden'] = {};
           this.videoTargetCache['hidden'] = {};
+
+          this.transformedTargetCache['original'] = this.traverse(this.config['original']);
         });
     },
 
@@ -183,8 +186,8 @@ export default {
           this.renderAppMode = 'hidden';
         }
         this.targetCacheModeChange(this.renderAppMode, m.renderMode);
-        this.targets = this.transformedTargetCache[this.renderAppMode];
-        this.current_state = this.targets[1];
+        //this.targets = this.transformedTargetCache[this.renderAppMode];
+        this.current_state = this.targets['1'];
         this.videoCacheModeChange(this.renderAppMode);
         this.changeState(this.current_state);
         this.$parent.drawMiniMap(this.current_state, this.targets);
@@ -193,12 +196,12 @@ export default {
 
     traverse(target){
       let targets = {};
-      if(target.name != "root") {
+      if(target.name && target.name != "root") {
         if(target.frame_no == -1) target.frame_no = 'frameless_' + this.targetCount;
         targets[target.frame_no] = target;
         ++this.targetCount;
       }
-      target.hasOwnProperty('children') && target.children.forEach(child => {
+      target.hasOwnProperty('children') && Object.values(target.children).forEach(child => {
         targets = {...targets, ...this.traverse(child)};
       });
       return targets;
@@ -251,7 +254,7 @@ export default {
     targetCacheModeChange(mode, transform){
       if(!this.transformedTargetCache.hasOwnProperty(mode)){
         if(!this.config.hasOwnProperty(mode)){
-          this.config[mode] = transformMode(utils.deepCopy(this.currentConfig), Object.values(this.config)[0], transform);
+          this.config[mode] = transformMode(this.config['original'], transform);
         }
         this.targetCount = 0;
         this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
