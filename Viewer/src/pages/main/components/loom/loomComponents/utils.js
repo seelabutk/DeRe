@@ -23,6 +23,20 @@ function findSibling(target1, target2, targets){
   return findChild(target1, findByName(target2.parent, targets));
 }
 
+function arrayToObject(arr){
+  const obj = {};
+  arr.forEach((el, i) => obj[i] = el);
+  return obj;
+}
+
+function shallowCopy(obj){
+  const nobj = {};
+  Object.entries(obj).forEach(([key, value]) => {
+    nobj[key] = value;
+  });
+  return nobj;
+}
+
 function deepCopy(obj){
   if(typeof obj === 'object' && obj !== null){
     if(obj.constructor === Array){
@@ -40,6 +54,23 @@ function deepCopy(obj){
     }
   }
   return obj;
+}
+
+function deepMerge(obj1, obj2){
+  if(obj1 === undefined)  return deepCopy(obj2);
+  if(obj2 === undefined)  return deepCopy(obj1);
+
+  let merged = {};
+
+  const keys = [...new Set(Object.keys(obj1).concat(Object.keys(obj2)))];
+  keys.forEach(key => {
+    if(obj1[key] === Object(obj1[key])){ //if primitive
+      merged[key] = obj2[key] || obj1[key];
+    } else {
+      merged[key] = deepMerge(obj1[key], obj2[key]);
+    }
+  });
+  return merged;
 }
 
 function absdiff(img1, img2){
@@ -112,17 +143,27 @@ function throttle (callback, limit, id=0) {
 }
 
 export default {
+  //loom utils
   currentTargets,
   findByName,
   findChild,
   findSibling,
+
+  //generic utils
+  arrayToObject,
+  shallowCopy,
   deepCopy,
+  deepMerge,
   absdiff,
+
+  //poly utils
   polyToPath2D,
   polyToPolyString,
   rectToPoly,
   bound,
   dist,
+
+  //js utils
   sleep,
   throttle,
 }

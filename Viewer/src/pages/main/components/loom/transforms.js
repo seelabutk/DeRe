@@ -8,10 +8,14 @@
     parent : str,
     shape : {
       type : str ['poly'],
-      points : Array[{
-        x : int,
-        y : int,
-      }],
+      points : ObjArray{
+        0: {
+          x : int,
+          y : int,
+        }
+        1: {...}
+        ...
+      },
       dimensions: {
         centerX: int,
         centerY: int,
@@ -21,11 +25,11 @@
         max_y: int,
       },
     },
-    children : Array[config],
+    children : ObjArray{...childrenConfigs},
 */
 
 import loomConfig from './loomConfig.json'
-//todo: make accessing potentially unset loomConfig options less difficult 
+import utils from './loomComponents/utils'
 
 function getFrameData(canvas, video, frame){
   const context = canvas.getContext('2d');
@@ -36,7 +40,7 @@ function getFrameData(canvas, video, frame){
 
 function findUiBarTargets(config){
   if(!config.hasOwnProperty('children'))  return [];
-  let groups = config.children.filter(c => c.shape.points.length == 4).map(c => [c]);
+  let groups = Object.values(config.children).filter(c => Object.keys(c.shape.points).length == 4).map(c => [c]);
   groups.forEach((c, i) => c[0].group = i);
   
   //horizontal bars
@@ -74,7 +78,7 @@ function findUiBarTargets(config){
     }
   }
   groups = groups.filter(g => g.length > 1);
-  return groups;
+  return groups
 }
 
 function boundsToCircle(dims){
@@ -96,36 +100,17 @@ function boundsToCircle(dims){
   return [points, newDims];
 }
 
-function traverseMobile(config){
-
-  let children = config.children;
-
-  //transform rows of buttons into mobile-friendly dropdown
+//transform rows of buttons into mobile-friendly dropdown
+function createUIBarTargets(config, nconfig){
   const uiBarTargets = findUiBarTargets(config);
   uiBarTargets.forEach(group => {
-    const nconfig = {}
-    nconfig.actor = 'dropdown';
-    nconfig.type = 'linear';
-    nconfig.name = group.map(c => c.name).join('-');
-    nconfig.description = group.map(c => c.description).join(':')
-    nconfig.id = group[0].id;
-    nconfig.parent = config.name;
-    nconfig.parent_id = config.id;
-    nconfig.children = group;
-    nconfig.frame_no = -1;
-    nconfig.child_visit_counter = group.length;
-    const gids = group.map(c => c.id);
-    config.children = config.children.filter(c => !gids.includes(c.id));
-    config.children.push(nconfig);
-    config.child_visit_counter = config.children.length;
-    children = group;
 
     let minX = Infinity;
     let maxX = 0;
     let minY = Infinity;
     let maxY = 0;
-
-    for(const target of group){
+    const ngroup = group.map(g => utils.shallowCopy(g));
+    for(const target of ngroup){
       target.parent = nconfig.name;
       target.parent_id = nconfig.id;
       target.hide = true;
@@ -134,51 +119,78 @@ function traverseMobile(config){
       minY = Math.min(target.shape.dimensions.min_y, minY);
       maxY = Math.max(target.shape.dimensions.max_y, maxY);
     }
-    nconfig.shape = {};
-    nconfig.shape.type = 'poly';
-    nconfig.shape.points = [
-      {x: minX, y: minY},
-      {x: maxX, y: minY},
-      {x: maxX, y: maxY},
-      {x: minX, y: maxY},
-    ];
-    nconfig.shape.dimensions = {
-      min_x: minX,
-      max_x: maxX,
-      min_y: minY,
-      max_y: maxY,
+
+    const child = {
+      actor: 'dropdown',
+      type: 'linear',
+      name: group.map(c => c.name).join('-'),
+      id: group[0].id, //todo: probably needs new uuid
+      parent: config.name,
+      parent_id: config.id,
+      children: group,
+      frame_no: -1,
+      child_visit_counter: Object.keys(group).length,
+      shape: {
+        type: 'poly',
+        points: {
+          0: {x: minX, y: minY},
+          1: {x: maxX, y: minY},
+          2: {x: maxX, y: maxY},
+          3: {x: minX, y: maxY},
+        },
+        dimensions: {
+          min_x: minX,
+          max_x: maxX,
+          min_y: minY,
+          max_y: maxY,
+        }
+      }
     };
-  });
 
-  //transform rectangular buttons/hover events into circular ones
-  const actors = ["button", "hover"];
-  if(actors.includes(config.actor) && config.shape.points.length == 4){
-    [config.shape.points, config.shape.dimensions] = boundsToCircle(config.shape.dimensions);
-    return;
-  }
-
-
-  children && children.forEach(child => {
-    traverseMobile(child);
+    const gids = Object.values(group).map(c => c.id);
+    nconfig.children[gids.join()] = child;
   });
 }
 
-// note: since we're working with objects, values will be copied by REFERENCE,
-// not by value, so no return values are needed in the traversal functions
-export default function(config, mode){
-
-  //TODO: only overwrite what is CHANGED
-  return {};
-
-  switch(mode){
-    case 'mobile':
-      config['mode'] = 'mobile';
-      traverseMobile(config);
-      break;
-    case 'desktop': //no traversal necessary, app already in desktop mode
-      break;
-    default:
-      break; 
+//transform rectangular buttons/hover events into circular ones
+function toCircleHover(config, nconfig){
+  const actors = ["button", "hover"];
+  if(actors.includes(config.actor) && config.shape.points.length == 4){
+    if(!nconfig.shape) nconfig = utils.shallowCopy(config);
+    [nconfig.shape.points, nconfig.shape.dimensions] = boundsToCircle(config.shape.dimensions);  
   }
-  return config;
+  return nconfig;
+}
+
+function traverseMobile(config, nconfig){
+  nconfig.children = {};
+  createUIBarTargets(config, nconfig);
+  nconfig = toCircleHover(config, nconfig);
+
+  config.children && Object.keys(config.children).forEach(key => {
+    nconfig.children[key] = nconfig.children[key] || {};
+    traverseMobile(config.children[key], nconfig.children[key]);
+  });
+}
+
+function createMobileMode(config){
+  const nconfig = utils.shallowCopy(config);
+  nconfig.mode = 'mobile';
+  traverseMobile(config, nconfig); 
+  return nconfig;
+}
+  
+export default function(config, transform){
+  if(transform == config['original'].mode){
+    return {};  //no changes required, mode already exists
+  }
+
+  switch(transform){
+    case 'mobile':
+      return createMobileMode(config['original']);
+    case 'desktop': 
+      return {} //todo
+    default:
+      return {};
+  }
 }

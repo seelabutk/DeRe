@@ -7,8 +7,8 @@
         position: 'absolute',
         width: width + 'px',
         height: height + 'px',
-        top: top + 'px',
-        left: left + 'px',
+        top: targetData.top + 'px',
+        left: targetData.left + 'px',
         clipPath: `url(#clipping-${targetData.id})`,
       }"
     >
@@ -122,8 +122,6 @@ export default {
       dragging: false,
       resizePolygonMode: false,
 
-      left: 0,
-      top: 0,
       width: 0,
       height: 0,
       ctx: null,
@@ -343,8 +341,8 @@ export default {
         this.$parent.videoTargets.push({
           id,
           region,
-          top: this.top,
-          left: this.left,
+          top: this.targetData.top,
+          left: this.targetData.left,
           makeCutout: cutout,
           parentCanvas: this,
           cutouts: [],
@@ -426,7 +424,7 @@ export default {
 
     clientToOffset(e){
       const {left, top} = this.$refs.container.getBoundingClientRect();
-      return {x: e.clientX - left - this.left, y: e.clientY - top - this.top};
+      return {x: e.clientX - left - this.targetData.left, y: e.clientY - top - this.targetData.top};
     },
   
     onVideoMouseMove(e){
@@ -447,8 +445,8 @@ export default {
       if(!this.dragging)  return;
       this.dragCurr = this.mouseLoc;
       if(this.dragMode){
-        this.top += e.movementY;
-        this.left += e.movementX;
+        this.targetData.top += e.movementY;
+        this.targetData.left += e.movementX;
       }
     },
 
@@ -611,12 +609,9 @@ export default {
     this.$refs.canvas.height = this.height;
     
     this.id = this.targetData.id
-    
-    this.top =  this.targetData.top || 0;
-    this.left = this.targetData.left || 0;
 
-    this.otop = this.top;
-    this.oleft = this.left;
+    this.otop = this.targetData.top;
+    this.oleft = this.targetData.left;
 
     //nextTick ensures the videoTarget reference will be created by the time this code runs
     this.$nextTick(()=>{
@@ -674,9 +669,6 @@ export default {
       const id = this.targetData.parentCanvas.targetData.cutouts.findIndex(c => c.id == this.targetData.id);
       if(id >= 0) this.targetData.parentCanvas.targetData.cutouts.splice(id, 1);
     }
-    //save positions
-    this.targetData.top = this.top;
-    this.targetData.left = this.left;
 
     //delete event listeners
     this.emitter.off('clearSelection', this.clearSelection);

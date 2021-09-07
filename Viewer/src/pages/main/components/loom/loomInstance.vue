@@ -60,6 +60,10 @@ export default {
       type: String,
       default: 'config.json'
     },
+    videoTargetCache: {
+      type: Object,
+      default: {}
+    },
     video_filename: {
       type: String,
       default: 'video.mp4'
@@ -89,7 +93,6 @@ export default {
     targetCount: 0,
     transformedTargetCache: {},
     //video
-    videoTargetCache: {},
     videoPlayers: [],
     //history
     interactionHistory: [],
@@ -103,7 +106,9 @@ export default {
 
   computed: {
     targets: function(){
-      return {...this.transformedTargetCache['original'], ...this.transformedTargetCache[this.renderAppMode]};
+      //todo: deep merge
+      return utils.deepMerge(this.transformedTargetCache['original'], this.transformedTargetCache[this.renderAppMode]);
+      // return {...this.transformedTargetCache['original'], ...this.transformedTargetCache[this.renderAppMode]};
     },
     videoTargets: function(){
       if(!this.current_state || !this.videoTargetCache[this.renderAppMode]) return null;
@@ -152,7 +157,7 @@ export default {
       return config;
     },
 
-    load(renderMode){
+    load(){
       if(this.loaded) return Promise.resolve();
       return fetch(this.directory + '/' + this.config_filename)
         .then(response => response.text())
@@ -181,16 +186,14 @@ export default {
 
     init(m){
       this.renderAppMode = `${m.value}_${m.renderMode}`;
-      return this.load(m.renderMode).then(()=>{
+      return this.load().then(()=>{
         if(!m.selected){
           this.renderAppMode = 'hidden';
         }
         this.targetCacheModeChange(this.renderAppMode, m.renderMode);
-        //this.targets = this.transformedTargetCache[this.renderAppMode];
         this.current_state = this.targets['1'];
         this.videoCacheModeChange(this.renderAppMode);
         this.changeState(this.current_state);
-        this.$parent.drawMiniMap(this.current_state, this.targets);
       });
     },
 
@@ -228,7 +231,6 @@ export default {
 
     changeStateWithFrameNo(frame){
       this.current_state = this.targets[frame];
-      this.$parent.drawMiniMap(this.current_state, this.targets);
     },
 
     highlightTarget(e){
@@ -254,7 +256,7 @@ export default {
     targetCacheModeChange(mode, transform){
       if(!this.transformedTargetCache.hasOwnProperty(mode)){
         if(!this.config.hasOwnProperty(mode)){
-          this.config[mode] = transformMode(this.config['original'], transform);
+          this.config[mode] = transformMode(this.config, transform);
         }
         this.targetCount = 0;
         this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
@@ -262,16 +264,37 @@ export default {
       }
     },
     
-    newVideoTarget(obj){
-      const nvt = {
-        id: String(this.current_state.id),
+    newVideoTarget(obj={}, mode=undefined){
+      if(mode === undefined)  mode = this.renderAppMode;
+
+      let id;
+      if(!this.videoTargetCache.hasOwnProperty(mode)){
+        id = '-1';
+        this.videoTargetCache[mode] = {};
+      }else{
+        id = String(this.current_state.id);
+      }
+
+      const region = utils.rectToPoly({
+        x: 0, y: 0,
+        width: this.currentConfig.window.width, 
+        height: this.currentConfig.window.height,
+      });
+
+      this.videoTargetCache[mode][id] = [{
+        id,
+        region,
+        top: 0,
+        left: 0,
+        makeCutout: true,
+        parentCanvas: true,
         cutouts: [],
         targets: this.targets,
-        parentCanvas: true,
-        ...obj
-      };
-      this.videoTargetCache[this.renderAppMode][this.current_state.id] = [nvt];
-      return nvt;
+        startupFn: null,
+        processed: true,
+        ...obj //to overwrite preceding values
+      }];
+      return this.videoTargetCache[mode][id];
     },
 
 
@@ -329,14 +352,10 @@ export default {
 
     videoCacheModeChange(mode){
       if(!this.videoTargetCache.hasOwnProperty(mode)){
-        //create "root", -1 == root
-        this.videoTargetCache[mode] = {
-          '-1': [{
-            id: '-1',
-            cutouts: [],
-            targets: this.targets,
-          }],
-        };
+        this.newVideoTarget({
+          parentCanvas: false,
+          processed: false,
+        }, mode);
       }
     },
 

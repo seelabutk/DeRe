@@ -145,6 +145,7 @@
         :id="`loomInstance-${key}`"
         :ref="`loomInstace-${key}`"
         :directory=directory
+        :videoTargetCache="appConfig"
         :regionSelect="regionSelect"
         :overlay="hintHelpState"
         :renderMode="renderMode"
@@ -163,7 +164,14 @@ import utils from './loomComponents/utils.js'
 import loomInstance from './loomInstance.vue'
 
 // TODOs: 
+
+// linking videoCanvases
+// ^ create link mapping and automation for it somehow
+// z-index adjuster
+// better dragging for videoCanvas'
 // auto-generate app based on user interaction
+// create api for auto generating apps
+
 
 export default {
 
@@ -194,6 +202,7 @@ export default {
       linkMode: 'none',
       searchResults: [],
       linkedCanvases: {},
+      appConfig: {},
       //settings
       loomMenuWidth: 120,
     };
@@ -252,45 +261,10 @@ export default {
         this.$refs[`loomInstace-${this.currVideoCanvasSelected.id}`].newVideoTarget(obj);
     },
 
-    drawMiniMap(current_state, targets){
-      return;
-      const canvas = this.$refs.miniMap;
-      const width = this.loomMenuWidth - 20;
-      const ratio = 10;
-      const height = 100;
-      const context = canvas.getContext("2d");
-
-      canvas.width = width;
-      canvas.height = height;
-      canvas.style.width = width + 'px';
-      canvas.style.height = height + 'px';
-
-      context.fillStyle = "#cccccc";
-      context.fillRect(0, 0, width, height);
-      context.fillStyle = "#aaaaaa";
-
-      Object.values(targets).forEach( target => {
-        if((
-            utils.findChild(target, current_state) == null &&
-            utils.findSibling(target, current_state, targets) == null &&
-            target.parent != 'root'
-          ) || target.hide || target.shape.type != "poly"
-        ) return;
-
-        context.beginPath();
-        context.moveTo(target.shape.points[0].x*ratio, target.shape.points[0].y*ratio);
-        for (let j = 1; j < target.shape.points.length; j++)
-          context.lineTo(target.shape.points[j].x*ratio, target.shape.points[j].y*ratio);
-        context.closePath();
-        context.fill();
-      });
-    },
-
     cutRegion(){
       this.dragMode = true;
       this.$refs.SelectMode.checked = false;
       this.regionOrigin.cutSelectedRegion();
-      this.drawMiniMap();
     },
     
     inputSearch(e){
@@ -347,19 +321,26 @@ export default {
       if(name == null || name == "")  return;
 
       const saveNames = JSON.parse(localStorage.getItem('saveNames')) || [];
-      if(!saveNames.some(n => n == name)) saveNames.push(name);
-      localStorage.setItem('saveNames', JSON.stringify(saveNames));
+      if(saveNames.some(n => n == name)){
+        prompt("Name already taken");
+        return;
+      }
+      saveNames.push(name);
+      
 
-      const vts = JSON.parse(JSON.stringify(this.videoTargetCache));//utils.deepCopy(this.videoTargetCache); - maximum call stack exceeded?
-      vts['current_state'] = this.current_state;
-      vts['appMode'] = this.appMode;
+      this.appConfig['startState'] = {
+        appMode: this.appMode,
+        current_state: this.current_state,
+      };
 
       try{
-        localStorage.setItem(name, JSON.stringify(vts));
+        localStorage.setItem('saveNames', JSON.stringify(saveNames));
+        localStorage.setItem(name, JSON.stringify(this.appConfig));
+        //todo: offer file download
       } catch (err) {
-        alert("Could not save to localStorage - too large");
+        alert(`Could not save to localStorage: ${String(err)}`);
         console.error(err);
-        //todo: file download
+        //todo: offer file download
       }
     },
 
@@ -376,16 +357,16 @@ export default {
         alert("File does not exist");
         return;
       }
-      const vts = JSON.parse(localStorage.getItem(loadName));
+      this.appConfig = JSON.parse(localStorage.getItem(loadName));
   
-      this.current_state = vts['current_state'];
-      delete vts['appMode'];
-      delete vts['current_state'];
-      this.videoTargetCache = vts;
-      this.init(this.appMode);
+      this.current_state = this.appConfig['startState']['current_state'];
+      this.appMode = this.appConfig['startState']['appMode'];
+
+      this.init();
     },
 
     linkVideoCanvas(){
+      //TODO
       if(!this.currVideoCanvasSelected){
         this.linkMode = 'none';
         return;
@@ -443,6 +424,7 @@ export default {
   },
 
   mounted(){
+    window.app = this;
     //set up events
     this.emitter.on("regionExists", e => {
       this.regionExists = e.exists;
