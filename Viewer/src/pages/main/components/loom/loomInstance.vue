@@ -105,17 +105,13 @@ export default {
   }),
 
   computed: {
-    targets: function(){
-      //todo: deep merge
-      return utils.deepMerge(this.transformedTargetCache['original'], this.transformedTargetCache[this.renderAppMode]);
-      // return {...this.transformedTargetCache['original'], ...this.transformedTargetCache[this.renderAppMode]};
-    },
+    targets: function(){ return utils.deepMerge(this.transformedTargetCache['original'], this.transformedTargetCache[this.renderAppMode]); },
     videoTargets: function(){
       if(!this.current_state || !this.videoTargetCache[this.renderAppMode]) return null;
-      for(let cs = this.current_state; cs; cs = utils.findByName(cs.parent, this.targets)){
-        if(typeof cs.frame_no === "string" && cs.frame_no.includes("frameless")){
-          cs = utils.findByName(cs.parent, this.targets); //skip frameless states
-        }
+
+      for(let cs = this.current_state; cs; cs = this.targets[cs.parent_id]){
+        if(typeof cs.frame_no === "string" && cs.frame_no.includes("frameless")) continue;
+
         const vts = Object.entries(this.videoTargetCache[this.renderAppMode]);
         for(let i = 0; i < vts.length; ++i){
           if(String(cs.id) === vts[i][0]){
@@ -128,7 +124,6 @@ export default {
   },
 
   methods: {
-
     setupVideo(element){
       const p = videojs.getPlayer(element);
       if(p) return p;
@@ -152,7 +147,7 @@ export default {
     parentify(config){
       Object.values(config.children).forEach(child => {
         child.parent_id = config.id;
-        if(child.hasOwnProperty('children') && child.children.length > 0) this.parentify(child);
+        if(child.hasOwnProperty('children') && Object.keys(child.children).length > 0) this.parentify(child);
       });      
       return config;
     },
@@ -191,7 +186,7 @@ export default {
           this.renderAppMode = 'hidden';
         }
         this.targetCacheModeChange(this.renderAppMode, m.renderMode);
-        this.current_state = this.targets['1'];
+        this.current_state = Object.values(this.targets).sort((a,b) => a.frame_no - b.frame_no)[0];
         this.videoCacheModeChange(this.renderAppMode);
         this.changeState(this.current_state);
       });
@@ -200,8 +195,8 @@ export default {
     traverse(target){
       let targets = {};
       if(target.name && target.name != "root") {
-        if(target.frame_no == -1) target.frame_no = 'frameless_' + this.targetCount;
-        targets[target.frame_no] = target;
+        if(target.frame_no == -1) target.frame_no = `frameless_${this.targetCount}`;
+        targets[target.id] = target;
         ++this.targetCount;
       }
       target.hasOwnProperty('children') && Object.values(target.children).forEach(child => {
@@ -230,27 +225,7 @@ export default {
     }, 
 
     changeStateWithFrameNo(frame){
-      this.current_state = this.targets[frame];
-    },
-
-    highlightTarget(e){
-      let name = e.target.innerHTML;
-      let target = null;
-      for (let i in this.targets) 
-        if (this.targets[i]["name"] == name)
-          target = this.targets[i];
-
-      if(target) {
-        if(target.parent == "root") {
-          this.current_state = this.currentConfig;
-        } else {
-          let parent = utils.findByName(target.parent, this.targets);
-          this.changeStateWithFrameNo(parent.frame_no);
-        }
-      }
-
-      let targetComponent = this.$refs['target'+target.id];
-      if(targetComponent) targetComponent.highlight();
+      this.current_state = Object.values(this.targets).find(o => o.frame_no == frame);
     },
 
     targetCacheModeChange(mode, transform){
@@ -260,7 +235,6 @@ export default {
         }
         this.targetCount = 0;
         this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
-        this.transformedTargetCache[mode][0] = this.config[mode];
       }
     },
     
@@ -308,7 +282,7 @@ export default {
         if(!vp.inUse){
           res(res);
         }
-        setTimeout(() => rej(res), 500);
+        setTimeout(() => rej(res), 1000);
       }).then(resolve => {
         const pi = vp.promises.findIndex(res => res == resolve);
 
@@ -334,6 +308,7 @@ export default {
         const pi = vp.promises.findIndex(res => res == resolve);
         vp.promises.splice(pi, 1);
         console.warn("frame took too long");
+        //todo: retry?
       });
     },
 

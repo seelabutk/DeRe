@@ -61,8 +61,8 @@
         :style="{
           width: width,
           height: height,
-          top: otop,
-          left: oleft,
+          top: '0px',
+          left: '0px',
           position: 'absolute',
           fill: 'black',
         }"
@@ -89,9 +89,6 @@
 // TODO: resizing, editing black cutout regions (moving, polygon, etc)
 
 import utils from './loomComponents/utils.js'
-
-import videojs from 'video.js'
-import 'video.js/dist/video-js.min.css'
 
 import loomConfig from './loomConfig.json'
 import loomBrushingBox from './loomComponents/loomBrushingBox.vue'
@@ -141,10 +138,8 @@ export default {
     targets(){ return this.targetData.targets; },
     currentTargets(){ return utils.currentTargets(this.current_state, this.targets); },
     currentPolygonMask(){ 
-      let cs;
-      for(cs = this.current_state; cs && !this.polygonMasks[cs.id]; cs = utils.findByName(cs.parent, this.targets))
-      if(cs && this.polygonMasks[cs.id]){
-        return this.polygonMasks[this.current_state.id];
+      for(let cs = this.current_state; cs && !this.polygonMasks[cs.id]; cs = this.targets[cs.parent_id]){
+        if(cs && this.polygonMasks[cs.id]) return this.polygonMasks[this.current_state.id];
       }
       return Object.values(this.polygonMasks)[0];
     },
@@ -215,7 +210,7 @@ export default {
     changeStateWithFrameNo(frame, offset = 0, changeParent = true){
 
       if(changeParent && this.updateParentCurrentState) this.$parent.changeStateWithFrameNo(frame, offset);
-      this.current_state = this.targets[frame];
+      this.current_state = Object.values(this.targets).find(o => o.frame_no == frame);
       let img = null;
 
       if(this.current_state && this.current_state.actor == "hover" && !this.hoverMapping[this.current_state.id]){
@@ -331,7 +326,7 @@ export default {
       if(regions.length > 0 && regions[0].constructor !== Array) regions = [regions];
       regions.forEach((region, i) => {
 
-        const id = String(this.targetData.id) + String(i);
+        const id = String(this.$parent.videoTargets.length);
 
         if(hoverCutout) {
           if(!this.hoverMapping[this.current_state.id]) this.hoverMapping[this.current_state.id] = {};
@@ -610,9 +605,6 @@ export default {
     
     this.id = this.targetData.id
 
-    this.otop = this.targetData.top;
-    this.oleft = this.targetData.left;
-
     //nextTick ensures the videoTarget reference will be created by the time this code runs
     this.$nextTick(()=>{
       
@@ -630,10 +622,12 @@ export default {
         }
         if(this.targetData.makeCutout && this.targetData.parentCanvas){
           const region = this.polygonMasks[this.current_state.id];
+
           const minX = Math.min(...region.map(p => p.x));
           const maxX = Math.max(...region.map(p => p.x));
           const minY = Math.min(...region.map(p => p.y));
           const maxY = Math.max(...region.map(p => p.y));
+
           const pcutouts = this.targetData.parentCanvas.targetData.cutouts;
           pcutouts.push({
             poly: utils.polyToPolyString(this.currentPolygonMask, 0, 0),
@@ -643,6 +637,8 @@ export default {
             left: minX,
             id: this.targetData.id,
           });
+
+          console.log(this.targetData.parentCanvas.targetData.cutouts)
 
           this.redraw();
         }

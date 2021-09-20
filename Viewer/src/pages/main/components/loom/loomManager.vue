@@ -160,13 +160,15 @@
 import Fuse from 'fuse.js'
 import Multiselect from '@vueform/multiselect'
 
-import utils from './loomComponents/utils.js'
+// import utils from './loomComponents/utils.js'
 import loomInstance from './loomInstance.vue'
 
 // TODOs: 
 
+// implement deep merge such that deepMerge(A,B) overwrites all of A with B but fills in all empty parts of B with A -
+//    if you really want empty overwrite of A with B then make B['prop'] = null;
 // linking videoCanvases
-// ^ create link mapping and automation for it somehow
+//    create link mapping and automation for it somehow
 // z-index adjuster
 // better dragging for videoCanvas'
 // auto-generate app based on user interaction

@@ -1,26 +1,27 @@
 function currentTargets(current_state, targets){
   if(!current_state) return {};
-  const keys = Object.keys(targets).filter(tkey => 
-    (findChild(targets[tkey], current_state) != null ||
-     findSibling(targets[tkey], current_state, targets) != null ||
-     targets[tkey].parent == 'root') && targets[tkey].hide != true
-  );
-  const ret = {};
-  keys.forEach(k => ret[k] = targets[k]);
-  return ret;
+  return objectFilter(targets, target => {
+    return (findChild(target, current_state) != null ||
+     findSibling(target, current_state, targets) != null ||
+     target.parent_id == '-1'
+    ) && target.hide != true
+  });
 }
-
 function findByName(name, targets){
   return Object.values(targets).find(t => t.name == name) || null;
 }
-
 function findChild(needle, haystack){
   if (!(haystack && haystack.hasOwnProperty("children"))) return null;
   return Object.values(haystack.children).find(c => c.frame_no == needle.frame_no) || null;
 }
-
 function findSibling(target1, target2, targets){
-  return findChild(target1, findByName(target2.parent, targets));
+  return findChild(target1, targets[target2.parent_id] || findByName(target2.parent, targets)); //todo: fix fallback of findByName to never be needed
+}
+
+function objectFilter(obj, fn){
+  const ret = {};
+  Object.keys(obj).filter(key => fn(obj[key])).forEach(key => ret[key] = obj[key]);
+  return ret;
 }
 
 function arrayToObject(arr){
@@ -150,6 +151,7 @@ export default {
   findSibling,
 
   //generic utils
+  objectFilter,
   arrayToObject,
   shallowCopy,
   deepCopy,
