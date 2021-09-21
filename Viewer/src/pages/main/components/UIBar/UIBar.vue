@@ -46,7 +46,7 @@ export default {
 
           let vc = interaction.vc;
           items.value = items.value.concat({
-            id: target.frame_no,
+            id: target.id,
             content: target.name,
             target,
             vc,
@@ -126,7 +126,7 @@ export default {
       })).forEach(item => {
         let widget = grid.addWidget(item);
         widget.addEventListener('click', e => { //not very vue-like cuz gridstack sucks.
-          app.appContext.config.globalProperties.emitter.emit(`changeState-${item.vc}`, item.target);
+          app.appContext.config.globalProperties.emitter.emit(`changeState-${item.vc}`, item.target.id);
         });
       });
     });

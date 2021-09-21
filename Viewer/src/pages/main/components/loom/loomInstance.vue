@@ -106,9 +106,7 @@ export default {
 
   computed: {
     targets: function(){
-      //todo: deep merge
       return utils.deepMerge(this.transformedTargetCache['original'], this.transformedTargetCache[this.renderAppMode]);
-      // return {...this.transformedTargetCache['original'], ...this.transformedTargetCache[this.renderAppMode]};
     },
     videoTargets: function(){
       if(!this.current_state || !this.videoTargetCache[this.renderAppMode]) return null;
@@ -192,8 +190,9 @@ export default {
         }
         this.targetCacheModeChange(this.renderAppMode, m.renderMode);
         this.current_state = this.targets['1'];
+        console.log(this.current_state, this.targets)
         this.videoCacheModeChange(this.renderAppMode);
-        this.changeState(this.current_state);
+        this.changeState(this.current_state.id);
       });
     },
 
@@ -201,7 +200,7 @@ export default {
       let targets = {};
       if(target.name && target.name != "root") {
         if(target.frame_no == -1) target.frame_no = 'frameless_' + this.targetCount;
-        targets[target.frame_no] = target;
+        targets[target.id] = target;
         ++this.targetCount;
       }
       target.hasOwnProperty('children') && Object.values(target.children).forEach(child => {
@@ -212,7 +211,7 @@ export default {
 
     updateInteractionHistory(target, e, videoCanvas){
       let interaction = {
-        id: target.frame_no,
+        id: target.id,
         videoCanvas,
         target,
         event: e,
@@ -224,8 +223,12 @@ export default {
       this.emitter.emit("runInteractionAnalysis", this.interactionHistory);
     },
     
-    changeState(target, offset = 0){
-      if(target === undefined)  return;
+    changeState(target_id, offset = 0){
+      const target = this.targets[target_id];
+      if(target === undefined)  {
+        console.error("Invalid state");  
+        return;
+      }
       this.changeStateWithFrameNo(target.frame_no, offset);
     }, 
 
@@ -233,7 +236,7 @@ export default {
       this.current_state = this.targets[frame];
     },
 
-    highlightTarget(e){
+    /*highlightTarget(e){
       let name = e.target.innerHTML;
       let target = null;
       for (let i in this.targets) 
@@ -251,7 +254,7 @@ export default {
 
       let targetComponent = this.$refs['target'+target.id];
       if(targetComponent) targetComponent.highlight();
-    },
+    },*/
 
     targetCacheModeChange(mode, transform){
       if(!this.transformedTargetCache.hasOwnProperty(mode)){
@@ -260,7 +263,6 @@ export default {
         }
         this.targetCount = 0;
         this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
-        this.transformedTargetCache[mode][0] = this.config[mode];
       }
     },
     

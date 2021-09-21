@@ -37,6 +37,18 @@ function shallowCopy(obj){
   return nobj;
 }
 
+function shallowCopyPrimitivesOnly(obj, filler=undefined){
+  const nobj = {};
+  Object.entries(obj).forEach(([key, value]) => {
+    if(obj[key] !== Object(obj[key])){
+      nobj[key] = obj[key];
+    } else if(filler !== undefined){
+      nobj[key] = filler;
+    }
+  });
+  return nobj;
+}
+
 function deepCopy(obj){
   if(typeof obj === 'object' && obj !== null){
     if(obj.constructor === Array){
@@ -62,11 +74,12 @@ function deepMerge(obj1, obj2){
 
   let merged = {};
 
-  const keys = [...new Set(Object.keys(obj1).concat(Object.keys(obj2)))];
-  keys.forEach(key => {
-    if(obj1[key] === Object(obj1[key])){ //if primitive
+  [...new Set(Object.keys(obj1).concat(Object.keys(obj2)))].forEach(key => {
+    if(obj1[key] !== Object(obj1[key])){ //if primitive
       merged[key] = obj2[key] || obj1[key];
-    } else {
+    }else if(obj2[key] === undefined || obj2[key] === null || Object.keys(obj2[key]).length == 0){ //if undefined, null, or empty object
+      merged[key] = obj1[key];
+    }else{
       merged[key] = deepMerge(obj1[key], obj2[key]);
     }
   });
@@ -152,6 +165,7 @@ export default {
   //generic utils
   arrayToObject,
   shallowCopy,
+  shallowCopyPrimitivesOnly,
   deepCopy,
   deepMerge,
   absdiff,

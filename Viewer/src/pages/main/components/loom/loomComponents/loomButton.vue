@@ -26,7 +26,7 @@ export default {
 
   mounted: function(){
     this.eventData['click'] = function(e) {
-      this.$emit('changeState', this.targetData);
+      this.$emit('changeState', this.targetData.id);
       this.$emit('addHistory', this.targetData, e)
     }.bind(this);
   },

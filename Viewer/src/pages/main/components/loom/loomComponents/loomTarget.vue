@@ -99,10 +99,6 @@ export default {
     this.registerCallback(this.targetData);
   },
   methods: {
-    highlight(){
-      //TODO
-      console.log('TODO: highlighting!');
-    },
     chooseCursor(target) {
       this.$refs.polygon.style.cursor = {
         "hover": "cell",

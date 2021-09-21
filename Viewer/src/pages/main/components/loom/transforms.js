@@ -104,32 +104,35 @@ function boundsToCircle(dims){
 function createUIBarTargets(config, nconfig){
   const uiBarTargets = findUiBarTargets(config);
   uiBarTargets.forEach(group => {
-
     let minX = Infinity;
     let maxX = 0;
     let minY = Infinity;
     let maxY = 0;
-    const ngroup = group.map(g => utils.shallowCopy(g));
-    for(const target of ngroup){
-      target.parent = nconfig.name;
-      target.parent_id = nconfig.id;
-      target.hide = true;
-      minX = Math.min(target.shape.dimensions.min_x, minX);
-      maxX = Math.max(target.shape.dimensions.max_x, maxX);
-      minY = Math.min(target.shape.dimensions.min_y, minY);
-      maxY = Math.max(target.shape.dimensions.max_y, maxY);
+
+    const ngroup = group.map(g => ({}));
+    for(const key in ngroup){
+      ngroup[key] = {
+        id: group[key].id,
+        name: group[key].name,
+        hide: true,
+      }
+
+      minX = Math.min(group[key].shape.dimensions.min_x, minX);
+      maxX = Math.max(group[key].shape.dimensions.max_x, maxX);
+      minY = Math.min(group[key].shape.dimensions.min_y, minY);
+      maxY = Math.max(group[key].shape.dimensions.max_y, maxY);
     }
 
     const child = {
       actor: 'dropdown',
       type: 'linear',
       name: group.map(c => c.name).join('-'),
-      id: group[0].id, //todo: probably needs new uuid
+      id: ngroup[0].id, //todo: probably needs new uuid
       parent: config.name,
       parent_id: config.id,
-      children: group,
+      children: ngroup,
       frame_no: -1,
-      child_visit_counter: Object.keys(group).length,
+      child_visit_counter: Object.keys(ngroup).length,
       shape: {
         type: 'poly',
         points: {
@@ -147,7 +150,7 @@ function createUIBarTargets(config, nconfig){
       }
     };
 
-    const gids = Object.values(group).map(c => c.id);
+    const gids = Object.values(ngroup).map(c => c.id);
     nconfig.children[gids.join()] = child;
   });
 }
@@ -156,16 +159,18 @@ function createUIBarTargets(config, nconfig){
 function toCircleHover(config, nconfig){
   const actors = ["button", "hover"];
   if(actors.includes(config.actor) && config.shape.points.length == 4){
-    if(!nconfig.shape) nconfig = utils.shallowCopy(config);
-    [nconfig.shape.points, nconfig.shape.dimensions] = boundsToCircle(config.shape.dimensions);  
+    [points, dimensions] = boundsToCircle(config.shape.dimensions);  
+    nconfig.shape = {
+      points, dimensions,
+    };
   }
-  return nconfig;
 }
 
 function traverseMobile(config, nconfig){
-  nconfig.children = {};
-  createUIBarTargets(config, nconfig);
-  nconfig = toCircleHover(config, nconfig);
+  nconfig.children = nconfig.children || {};
+
+  createUIBarTargets(config, nconfig);  //create new UIBarTargets and modify targetData to look like UIBar
+  toCircleHover(config, nconfig);       //change all rectangular hovers to circle clicks
 
   config.children && Object.keys(config.children).forEach(key => {
     nconfig.children[key] = nconfig.children[key] || {};
@@ -174,8 +179,9 @@ function traverseMobile(config, nconfig){
 }
 
 function createMobileMode(config){
-  const nconfig = utils.shallowCopy(config);
+  const nconfig = utils.shallowCopyPrimitivesOnly(config, {});
   nconfig.mode = 'mobile';
+  delete nconfig.children;  //have to do it like this otherwise will overwrite original config children
   traverseMobile(config, nconfig); 
   return nconfig;
 }

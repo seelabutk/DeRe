@@ -208,7 +208,8 @@ export default {
       return undefined;//loomTarget
     },
 
-    changeState(target, offset = 0, changeParent = true){
+    changeState(target_id, offset = 0, changeParent = true){
+      const target = this.targets[target_id];
       this.changeStateWithFrameNo(target.frame_no, offset, changeParent);
     }, 
 
@@ -617,7 +618,7 @@ export default {
     this.$nextTick(()=>{
       
       if(this.current_state){
-        this.changeState(this.current_state, 0, false);
+        this.changeState(this.current_state.id, 0, false);
         if(this.targetData.region){
           this.polygonMasks[this.current_state.id] = this.targetData.region;
         } else {

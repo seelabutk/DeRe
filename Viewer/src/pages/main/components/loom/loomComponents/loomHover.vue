@@ -27,7 +27,7 @@ export default {
 
   mounted: function(){
     this.eventData['mouseover'] = function(e) {
-      this.$emit('changeState', this.targetData);
+      this.$emit('changeState', this.targetData.id);
       this.$emit('addHistory', this.targetData, e)
     }.bind(this);
     this.eventData['mouseleave'] = function(e){

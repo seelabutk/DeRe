@@ -94,7 +94,7 @@ export default {
       const coord_h = Math.round((this.brushing.end_y - this.brushing.start_y) / step_y) - 1; // Why is this -1 important??
 
       const offset = coord_h*interval**0 + coord_w*interval**1 + coord_y*interval**2 + coord_x*interval**3; 
-      this.$emit("changeState", this.targetData, offset);
+      this.$emit("changeState", this.targetData.id, offset);
 
     }.bind(this);
   },

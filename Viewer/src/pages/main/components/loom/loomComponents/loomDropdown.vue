@@ -20,7 +20,7 @@ export default {
   methods: {
     onChange(e){
       const targetData = this.targetData.children[e.target.selectedIndex];
-      this.$emit('changeState', targetData);
+      this.$emit('changeState', targetData.id);
       this.$emit('addHistory', targetData, e)
     },
   },

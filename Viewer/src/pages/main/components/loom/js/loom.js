@@ -765,7 +765,7 @@ $(document).ready(function() {
             {
                 return;
             }
-            poly.classList.toggle("highlight");
+            poly.classList.toggle("");
         });
 
         $(".loom-target:empty").each(function(){

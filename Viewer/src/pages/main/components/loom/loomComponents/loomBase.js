@@ -69,12 +69,12 @@ const mixin = {
 
   
 
-  methods: {
+  /*methods: {
     highlight(){
       //TODO
       console.log('TODO: highlighting!');
     },
-  },
+  },*/
 }
 
 export default mixin;
