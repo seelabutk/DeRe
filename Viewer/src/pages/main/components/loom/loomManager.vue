@@ -159,18 +159,18 @@
 <script>
 import Fuse from 'fuse.js'
 import Multiselect from '@vueform/multiselect'
-
-// import utils from './loomComponents/utils.js'
 import loomInstance from './loomInstance.vue'
 
 // TODOs: 
+// make "children" flat array, not weird empty object keyed on id
+// fix saving to use transformedTargetCache's
 
-// implement deep merge such that deepMerge(A,B) overwrites all of A with B but fills in all empty parts of B with A -
-//    if you really want empty overwrite of A with B then make B['prop'] = null;
 // linking videoCanvases
 //    create link mapping and automation for it somehow
 // z-index adjuster
 // better dragging for videoCanvas'
+
+
 // auto-generate app based on user interaction
 // create api for auto generating apps
 
@@ -332,11 +332,8 @@ export default {
 
       this.appConfig['startState'] = {
         appMode: this.appMode,
-        current_state: this.current_state,
+        current_state: this.current_state.id,
       };
-
-      //todo: remove all parentCanvas'
-      //remove all target information except target ids
 
       try{
         localStorage.setItem('saveNames', JSON.stringify(saveNames));

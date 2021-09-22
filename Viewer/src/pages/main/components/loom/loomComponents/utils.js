@@ -1,11 +1,13 @@
 function currentTargets(current_state, targets){
   if(!current_state) return {};
   const cts = objectFilter(targets, target => {
-    return (
-     isChild(current_state, target) ||
-     isSibling(targets, target, current_state) ||
-     target.parent_id == '-1'
-    ) && target.hide != true
+    return target.hide != true &&
+     target.id != '-1' && 
+     (
+      isChild(current_state, target) ||
+      isSibling(targets, target, current_state) ||
+      target.parent_id == '-1'
+    );
   });
   return cts;
 }
@@ -69,7 +71,6 @@ function deepCopy(obj){
 }
 
 function deepMerge(obj1, obj2){
-
   const cobj1 = deepCopy(obj1);
   const cobj2 = deepCopy(obj2);
 
@@ -90,10 +91,6 @@ function deepMerge(obj1, obj2){
     });
     return merged;
   })(cobj1, cobj2);
-}
-
-function overwriteMerge(obj1, obj2){
-  
 }
 
 function absdiff(img1, img2){
@@ -176,7 +173,6 @@ export default {
   shallowCopyPrimitivesOnly,
   deepCopy,
   deepMerge,
-  overwriteMerge,
   absdiff,
 
   //poly utils

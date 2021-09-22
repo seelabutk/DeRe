@@ -102,7 +102,7 @@ export default {
   name: 'loomVideoCanvas',
   emits: ['frame_processed'],
 
-  props: ['regionSelect', 'overlay', 'renderMode', 'dragMode', 'currentConfig', 'start_state_id', 'targetData', 'loomID'],
+  props: ['regionSelect', 'overlay', 'renderMode', 'dragMode', 'info', 'start_state_id', 'targetData', 'loomID'],
   components: {
     loomTarget,
     loomButton,
@@ -139,7 +139,7 @@ export default {
     targets(){ return this.targetData.targets; },
     currentTargets(){ return utils.currentTargets(this.current_state, this.targets); },
     currentPolygonMask(){ 
-      for(let cs = this.current_state; cs && !this.polygonMasks[cs.id]; cs = this.targets[cs.parent_id]){
+      for(let cs = this.current_state; cs && !this.polygonMasks[cs.id] && cs.parent_id != cs.id; cs = this.targets[cs.parent_id]){
         if(cs && this.polygonMasks[cs.id]) return this.polygonMasks[this.current_state.id];
       }
       return Object.values(this.polygonMasks)[0];
@@ -190,8 +190,8 @@ export default {
   methods: {
     
     getComponent: function(target){
-      if(target.name == 'root') return undefined;
-      const loomObjectName = "loom" + target.actor.charAt(0).toUpperCase() + target.actor.slice(1);
+      if(target.id == '-1') return undefined;
+      const loomObjectName = `loom${target.actor.charAt(0).toUpperCase() + target.actor.slice(1)}`;
       if(loomConfig[this.renderMode] && loomConfig[this.renderMode].mappings){
         const componentName = loomConfig[this.renderMode].mappings[loomObjectName];
         if(componentName && this.$options.components[componentName])
@@ -598,8 +598,8 @@ export default {
     this.ctx = this.$refs.canvas.getContext('2d');
     this.ctx.save();
 
-    this.width = this.currentConfig.window.width;
-    this.height = this.currentConfig.window.height;
+    this.width = this.info.window.width;
+    this.height = this.info.window.height;
 
     this.$refs.canvas.width = this.width;
     this.$refs.canvas.height = this.height;

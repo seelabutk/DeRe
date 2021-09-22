@@ -224,44 +224,57 @@ def objDiff(obj1, obj2, keys=[], cache={}):
 def circToPoly(obj):
     obj['shape'] = 20
 
-#Version 0.0.5 (current)
+
+def flatRecurse(obj, flat={}):
+    for val in obj.values():
+        flat[val['id']] = val
+        if 'children' in val:
+            flatRecurse(val['children'], flat)
+            flat[val['id']]['children'] = {v['id']: {} for v in val['children'].values()}
+    return flat
+
+
+def flattenConfig(obj):
+    flat = {}
+    for key in obj:
+        if key == 'version':
+            flat[key] = obj[key]
+            continue
+        flat[key] = {}
+        flat['info'] = obj[key]
+        flat[key]['info'] = {'mode': obj[key]['mode']}
+        flat[key]['data'] = {}
+        flat[key]['data'] = flatRecurse(obj[key]['children'])
+        flat[key]['data']['-1'] = {'children': {v['id']: {} for v in obj[key]['children'].values()}, 'id': '-1' }
+        del flat['info']['id']
+        del flat['info']['children']
+        del flat['info']['visited']
+        del flat['info']['child_visit_counter']
+        del flat['info']['frame_no']
+        del flat['info']['name']
+        del flat['info']['mode']
+    return flat
+
+def parentifyRecurse(obj, key, parentkey):
+    pid = obj[parentkey]['id']
+    obj[key]['parent_id'] = pid
+    if 'parent' in obj[key]:
+        del obj[key]['parent']
+    if 'children' in obj[key]:
+        for childKey in obj[key]['children']:
+            parentifyRecurse(obj, childKey, key)
+
+def parentify(obj):
+    del obj['version']
+    for key in obj:
+        if key == 'info':
+            continue
+        parentifyRecurse(obj[key]['data'], '-1', '-1')
+    return obj
+
+#Version 0.0.7 (current)
 
 def main(ifile, ofile):
-
-    """
-    objDiff Test
-    obj1 = {
-        '1': {
-            '2':{
-                '3': 'ok3',
-                '4': 'ok4',
-            },
-            '5': 'ok5',
-            '6': {
-                '6.1': 'ok6.1',
-                '6.2': 'ok6.2'
-            }
-        },
-        '7': 'ok7',
-        '8': 'ok8',
-    }
-
-    obj2 = copy.deepcopy(obj1)
-    obj2['1']['1.1'] = {
-        '1.2': 'ok1.2',
-        '1.3': 'ok1.3',
-    }
-    obj2['1']['2']['3'] = 'ok3.1'
-    obj2['1']['6'] = 'ok6'
-    obj2['1']['2']['4.1'] = 'ok4.1'
-    obj2['1']['2']['4.2'] = {
-        '4.3': 'ok4.3',
-        '4.4': 'ok4.4',
-    }
-    obj2['9'] = 'ok9'
-    objDiff(obj1, obj2)
-    return """
-
     with open(ifile, 'r') as fin:
         iconfig = json.load(fin)
 
@@ -317,12 +330,17 @@ def main(ifile, ofile):
             for d in dels:
                 del iconfig[d]
 
-            configConverter = ConfigConverter([
-                Conversion(find={'version': '0.0.5'}, convert = versionConvert('0.0.6'))
-            ])
+            configConverter = ConfigConverter([Conversion(find={'version': '0.0.5'}, convert = versionConvert('0.0.6'))])
             iconfig = configConverter.convert(iconfig)
 
         if iconfig['version'] == '0.0.6':
+            configConverter = ConfigConverter([Conversion(find={'version': '0.0.6'}, convert = versionConvert('0.0.7'))])
+            iconfig = configConverter.convert(iconfig)
+            
+            iconfig = flattenConfig(iconfig)
+            iconfig = parentify(iconfig)
+        
+        if iconfig['info']['version'] == '0.0.7':
             print("current version")
 
     with open(ofile, 'w') as fout:

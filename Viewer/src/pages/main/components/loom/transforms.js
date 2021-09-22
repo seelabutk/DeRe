@@ -196,19 +196,18 @@ function createMobileMode(config){
   return nconfig;
 }
   
-export default function(config, transform){
-  if(transform == config.mode)  return {};  //no changes required, mode already exists
+export default function(instanceData, config, transform){
+  if(transform == instanceData.info.mode)  return {};  //no changes required, mode already exists
 
-  let nconfig;
+  let nconfig = {};
   switch(transform){
     case 'mobile':
-      nconfig = createMobileMode(config);
+      nconfig.info = {mode: 'mobile'};
+      nconfig.data = createMobileMode(config);
       break;
     case 'desktop': 
-      nconfig = {} //todo
       break;
     default:
-      nconfig = {};
       break;
   }
   return nconfig;

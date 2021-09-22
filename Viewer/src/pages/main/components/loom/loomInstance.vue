@@ -2,8 +2,8 @@
   <div 
     id="loom"
     :style="{
-      height: currentConfig ? currentConfig.window.height + 'px' : '0px',
-      width:  currentConfig ? currentConfig.window.width  + 'px' : '0px',
+      height: config ? config.info.window.height + 'px' : '0px',
+      width:  config ? config.info.window.width  + 'px' : '0px',
       outline: regionSelect ? 'dashed white' : 'none',
     }"
   >
@@ -13,8 +13,8 @@
       :key="key"
       :ref="`videoPlayer${val.id}`"
       :style="{
-        width:  currentConfig ? currentConfig.window.width  + 'px' : '0px',
-        height: currentConfig ? currentConfig.window.height + 'px' : '0px',
+        width:  config ? config.info.window.width  + 'px' : '0px',
+        height: config ? config.info.window.height + 'px' : '0px',
       }"
       class="video-js" 
       style="position: absolute; top: 0px; left: 0px; visibility: hidden;"
@@ -29,6 +29,7 @@
       :overlay="overlay"
       :renderMode="renderAppMode"
       :currentConfig="currentConfig"
+      :info="config.info"
       :start_state_id="current_state.id"
       :dragMode="dragMode"
       @frame_processed="() => videoTarget.processed = true"
@@ -90,7 +91,6 @@ export default {
     loaded: false,
     renderAppMode: null,
     //targets
-    targetCount: 0,
     transformedTargetCache: {},
     //video
     videoPlayers: [],
@@ -151,27 +151,13 @@ export default {
       });
     },
 
-    parentify(config){
-      Object.values(config.children).forEach(child => {
-        child.parent_id = config.id;
-        if(child.hasOwnProperty('children') && Object.keys(child.children).length > 0) this.parentify(child);
-      });      
-      return config;
-    },
-
     load(){
       if(this.loaded) return Promise.resolve();
       return fetch(this.directory + '/' + this.config_filename)
         .then(response => response.text())
         .then(config => JSON.parse(config))
         .then(config => {
-          Object.keys(config).forEach(key => {
-            if(key == 'version')  return;
-            config[key] = this.parentify(config[key]);
-          });
-          return config
-        }).then(config => {
-          if(config['version'] != loomConfig['version']){
+          if(config.info['version'] != loomConfig['version']){
             console.error('ERROR, out of version config file, run Recorder/convert.py');
             return;
           }
@@ -182,8 +168,7 @@ export default {
           this.transformedTargetCache['hidden'] = {};
           this.videoTargetCache['hidden'] = {};
 
-          this.transformedTargetCache['original'] = this.traverse(this.config['original']);
-          this.targetCount = 0;
+          this.transformedTargetCache['original'] = this.config['original'].data;
         });
     },
 
@@ -198,36 +183,6 @@ export default {
         this.videoCacheModeChange(this.renderAppMode);
         this.changeState(this.current_state.id);
       });
-    },
-
-    traverse(config){
-      const self = this;
-      const flatTargets = (function traverse_recurse(target){
-        let targets = {};
-        if(target.name && target.name != "root") {
-          if(target.frame_no == -1) target.frame_no = `frameless_${this.targetCount}`;
-          targets[target.id] = target;
-          ++self.targetCount;
-        }
-        if(target.hasOwnProperty('children')){
-          Object.values(target.children).forEach(child => {
-            targets = {...targets, ...traverse_recurse(child)};
-          });
-          const newChildren = {};
-          Object.values(target.children).map(c => c.id).forEach(id => {
-            newChildren[id] = {};
-          });
-          target.children = newChildren;
-        }
-        return targets;
-      })(config);
-
-      flatTargets['mode'] = config.mode;
-      flatTargets['-1'] = { children: {}, frame_no: -1, id: '-1' };
-      Object.keys(config.children).forEach(child => {
-        flatTargets['-1'].children[child] = {};
-      })
-      return flatTargets;
     },
 
     updateInteractionHistory(target, e, videoCanvas){
@@ -260,10 +215,9 @@ export default {
     targetCacheModeChange(mode, transform){
       if(!this.transformedTargetCache.hasOwnProperty(mode)){
         if(!this.config.hasOwnProperty(mode)){
-          this.transformedTargetCache[mode] = transformMode(this.transformedTargetCache['original'], transform);
-        } else {
-          this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
-        }
+          this.config[mode] = transformMode(this.config, this.transformedTargetCache['original'], transform);
+        } 
+        this.transformedTargetCache[mode] = this.config[mode].data || {};
       }
     },
     
@@ -280,8 +234,8 @@ export default {
 
       const region = utils.rectToPoly({
         x: 0, y: 0,
-        width: this.currentConfig.window.width, 
-        height: this.currentConfig.window.height,
+        width: this.config.info.window.width, 
+        height: this.config.info.window.height,
       });
 
       this.videoTargetCache[mode][id] = [{
