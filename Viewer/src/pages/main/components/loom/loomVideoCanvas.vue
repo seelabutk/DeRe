@@ -232,7 +232,7 @@ export default {
           if(!this.$refs.canvas)  return;
           let rect = null;
 
-          if(!this.hoverMapping[this.current_state.rect]){
+          if(!this.hoverMapping[this.current_state.id].rect){
             const newImg = cv.imread(this.$refs.canvas);
             rect = this.compareImages(img, newImg);
             if(rect)  this.hoverMapping[this.current_state.id].rect = rect;
@@ -327,14 +327,14 @@ export default {
       if(regions.length > 0 && regions[0].constructor !== Array) regions = [regions];
       regions.forEach((region, i) => {
 
-        const id = String(this.$parent.videoTargets.length);
+        const id = String(Object.keys(this.$parent.videoTargets).length);
 
         if(hoverCutout) {
           if(!this.hoverMapping[this.current_state.id]) this.hoverMapping[this.current_state.id] = {};
           this.hoverMapping[this.current_state.id].id = id;
         }
 
-        this.$parent.videoTargets.push({
+        this.$parent.videoTargets[id] = {
           id,
           region,
           top: this.targetData.top,
@@ -350,7 +350,7 @@ export default {
             delete c.targetData.startupFn;
           },
           processed: true,
-        });
+        };
       });
     },
 
@@ -579,8 +579,8 @@ export default {
     },
 
     DeleteHoverCanvas(){
-      const idx = this.$parent.videoTargets.findIndex(vt => vt.id == this.hoverMapping[this.current_state.id].id);
-      if(idx >= 0) this.$parent.videoTargets.splice(idx, 1);
+      const vt = Object.values(this.$parent.videoTargets).find(vt => vt.id == this.hoverMapping[this.current_state.id]);
+      if(vt) delete this.$parent.videoTargets[vt.id];
     },
 
     clearSelection(){

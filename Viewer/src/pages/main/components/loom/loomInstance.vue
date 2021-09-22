@@ -61,6 +61,10 @@ export default {
       type: String,
       default: 'config.json'
     },
+    vtc_filename: {
+      type: String,
+      default: 'vtc.json'
+    },
     videoTargetCache: {
       type: Object,
       default: {}
@@ -153,10 +157,13 @@ export default {
 
     load(){
       if(this.loaded) return Promise.resolve();
-      return fetch(this.directory + '/' + this.config_filename)
-        .then(response => response.text())
-        .then(config => JSON.parse(config))
-        .then(config => {
+      return Promise.all([
+          fetch(this.directory + '/' + this.config_filename),
+          fetch(this.directory + '/' + this.vtc_filename),
+        ])
+        .then(([r1, r2]) => Promise.all([r1.text(), r2.text()]))
+        .then(([config, vtc]) => [JSON.parse(config), JSON.parse(vtc)])
+        .then(([config, vtc]) => {
           if(config.info['version'] != loomConfig['version']){
             console.error('ERROR, out of version config file, run Recorder/convert.py');
             return;
@@ -169,20 +176,64 @@ export default {
           this.videoTargetCache['hidden'] = {};
 
           this.transformedTargetCache['original'] = this.config['original'].data;
+
+          return [config, vtc];
         });
     },
 
     init(m){
       this.renderAppMode = `${m.value}_${m.renderMode}`;
-      return this.load().then(()=>{
+      this.load().then(([config, vtc])=>{
         if(!m.selected){
           this.renderAppMode = 'hidden';
         }
         this.targetCacheModeChange(this.renderAppMode, m.renderMode);
         this.current_state = Object.values(this.targets).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[0];
+        this.init_videoTargetCache(vtc);
         this.videoCacheModeChange(this.renderAppMode);
         this.changeState(this.current_state.id);
       });
+    },
+
+    init_videoTargetCache(cvt_config){
+      const vt_config = utils.deepCopy(cvt_config);
+      for(let mode of Object.values(vt_config)){
+        for(let page of Object.values(mode)){
+          for(let window of Object.values(page)){
+            window.cutouts = window.cutouts || [];
+            window.targets = this.targets;
+            window.processed = true;
+            if(window.parentCanvas){
+              this.$nextTick(() => {
+                window.parentCanvas = this.$refs[`loomVideoCanvas-${window.parentCanvas}`];
+                if(window.makeCutout && window.parentCanvas){
+                  window.parentCanvas.targetData.cutouts = window.parentCanvas.cutouts || [];
+
+                  const region = window.region;
+                  const minX = Math.min(...region.map(p => p.x));
+                  const maxX = Math.max(...region.map(p => p.x));
+                  const minY = Math.min(...region.map(p => p.y));
+                  const maxY = Math.max(...region.map(p => p.y));
+
+                  const pcutouts = window.parentCanvas.targetData.cutouts;
+                  pcutouts.push({
+                    poly: utils.polyToPolyString(region, 0, 0),
+                    width: maxX-minX,
+                    height: maxY-minY,
+                    top: minY,
+                    left: minX,
+                    id: window.id
+                  });
+                }
+              });
+            }
+          }
+        }
+      }
+
+      for(let key in vt_config){
+        this.videoTargetCache[key] = vt_config[key];
+      }
     },
 
     updateInteractionHistory(target, e, videoCanvas){
@@ -224,9 +275,8 @@ export default {
     newVideoTarget(obj={}, mode=undefined){
       if(mode === undefined)  mode = this.renderAppMode;
 
-      let id;
+      let id = '-1';
       if(!this.videoTargetCache.hasOwnProperty(mode)){
-        id = '-1';
         this.videoTargetCache[mode] = {};
       }else{
         id = String(this.current_state.id);
@@ -238,7 +288,11 @@ export default {
         height: this.config.info.window.height,
       });
 
-      this.videoTargetCache[mode][id] = [{
+      if(!this.videoTargetCache[mode][id])
+        this.videoTargetCache[mode][id] = {};
+
+      const len = Object.keys(this.videoTargetCache[mode][id]).length;
+      this.videoTargetCache[mode][id][len] = {
         id,
         region,
         top: 0,
@@ -250,7 +304,7 @@ export default {
         startupFn: null,
         processed: true,
         ...obj //to overwrite preceding values
-      }];
+      };
       return this.videoTargetCache[mode][id];
     },
 
