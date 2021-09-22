@@ -4,23 +4,24 @@
     @change='onChange' 
     :style="calcStyle"
   >
-    <option v-for="option in targetData.children"
-      :key="option.id"
+    <option v-for="id in Object.keys(targetData.children)"
+      :key="id"
     >
-      {{option.name}}
+      {{targets[id].name}}
     </option>
   </select>
 </template>
 
 <script>
 import loomBase from './loomBase'
+import utils from './utils'
 export default {
   name: 'loomDropdown',
   mixins: [loomBase],
   methods: {
     onChange(e){
-      const targetData = this.targetData.children[e.target.selectedIndex];
-      this.$emit('changeState', targetData);
+      const targetData = this.targets[Object.keys(this.targetData.children)[e.target.selectedIndex]];
+      this.$emit('changeState', targetData.id);
       this.$emit('addHistory', targetData, e)
     },
   },

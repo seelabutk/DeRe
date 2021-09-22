@@ -1,6 +1,6 @@
 
 const mixin = {
-  props: ['parent', 'targetData', 'showHint', 'interactable', 'current_state'],
+  props: ['parent', 'targetData', 'showHint', 'interactable', 'current_state', 'targets'],
   emits: ['changeState', 'addHistory'],
   data: function(){
     return {
@@ -69,12 +69,12 @@ const mixin = {
 
   
 
-  methods: {
+  /*methods: {
     highlight(){
       //TODO
       console.log('TODO: highlighting!');
     },
-  },
+  },*/
 }
 
 export default mixin;

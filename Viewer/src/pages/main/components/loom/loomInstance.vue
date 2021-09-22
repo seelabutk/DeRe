@@ -105,7 +105,14 @@ export default {
   }),
 
   computed: {
-    targets: function(){ return utils.deepMerge(this.transformedTargetCache['original'], this.transformedTargetCache[this.renderAppMode]); },
+    targets: function(){
+      const originalTargets = utils.shallowCopy(this.transformedTargetCache['original']);
+      delete originalTargets.mode;
+      const newTargets = utils.shallowCopy(this.transformedTargetCache[this.renderAppMode]);
+      delete newTargets.mode;
+      const mergedTargets = utils.deepMerge(originalTargets, newTargets);
+      return mergedTargets;
+    },
     videoTargets: function(){
       if(!this.current_state || !this.videoTargetCache[this.renderAppMode]) return null;
 
@@ -176,6 +183,7 @@ export default {
           this.videoTargetCache['hidden'] = {};
 
           this.transformedTargetCache['original'] = this.traverse(this.config['original']);
+          this.targetCount = 0;
         });
     },
 
@@ -186,28 +194,45 @@ export default {
           this.renderAppMode = 'hidden';
         }
         this.targetCacheModeChange(this.renderAppMode, m.renderMode);
-        this.current_state = Object.values(this.targets).sort((a,b) => a.frame_no - b.frame_no)[0];
+        this.current_state = Object.values(this.targets).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[0];
         this.videoCacheModeChange(this.renderAppMode);
-        this.changeState(this.current_state);
+        this.changeState(this.current_state.id);
       });
     },
 
-    traverse(target){
-      let targets = {};
-      if(target.name && target.name != "root") {
-        if(target.frame_no == -1) target.frame_no = `frameless_${this.targetCount}`;
-        targets[target.id] = target;
-        ++this.targetCount;
-      }
-      target.hasOwnProperty('children') && Object.values(target.children).forEach(child => {
-        targets = {...targets, ...this.traverse(child)};
-      });
-      return targets;
+    traverse(config){
+      const self = this;
+      const flatTargets = (function traverse_recurse(target){
+        let targets = {};
+        if(target.name && target.name != "root") {
+          if(target.frame_no == -1) target.frame_no = `frameless_${this.targetCount}`;
+          targets[target.id] = target;
+          ++self.targetCount;
+        }
+        if(target.hasOwnProperty('children')){
+          Object.values(target.children).forEach(child => {
+            targets = {...targets, ...traverse_recurse(child)};
+          });
+          const newChildren = {};
+          Object.values(target.children).map(c => c.id).forEach(id => {
+            newChildren[id] = {};
+          });
+          target.children = newChildren;
+        }
+        return targets;
+      })(config);
+
+      flatTargets['mode'] = config.mode;
+      flatTargets['-1'] = { children: {}, frame_no: -1, id: '-1' };
+      Object.keys(config.children).forEach(child => {
+        flatTargets['-1'].children[child] = {};
+      })
+      return flatTargets;
     },
 
     updateInteractionHistory(target, e, videoCanvas){
       let interaction = {
-        id: target.frame_no,
+        id: target.id,
         videoCanvas,
         target,
         event: e,
@@ -219,8 +244,12 @@ export default {
       this.emitter.emit("runInteractionAnalysis", this.interactionHistory);
     },
     
-    changeState(target, offset = 0){
-      if(target === undefined)  return;
+    changeState(target_id, offset = 0){
+      const target = this.targets[target_id];
+      if(target === undefined)  {
+        console.error("Invalid state");  
+        return;
+      }
       this.changeStateWithFrameNo(target.frame_no, offset);
     }, 
 
@@ -231,10 +260,10 @@ export default {
     targetCacheModeChange(mode, transform){
       if(!this.transformedTargetCache.hasOwnProperty(mode)){
         if(!this.config.hasOwnProperty(mode)){
-          this.config[mode] = transformMode(this.config, transform);
+          this.transformedTargetCache[mode] = transformMode(this.transformedTargetCache['original'], transform);
+        } else {
+          this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
         }
-        this.targetCount = 0;
-        this.transformedTargetCache[mode] = this.traverse(this.config[mode]);
       }
     },
     

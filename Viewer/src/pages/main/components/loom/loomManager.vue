@@ -121,7 +121,7 @@
         placeholder="Search"
       />
 
-      <table class="table-striped search-results-table">
+      <!--<table class="table-striped search-results-table">
         <thead>
         <tr>
           <th>State</th>
@@ -135,7 +135,7 @@
             <td @click="highlightTarget">{{r.item.name}}</td>
           </tr>
         </tbody>
-      </table>
+      </table>!-->
     </div>
 
     <div>
@@ -335,6 +335,9 @@ export default {
         current_state: this.current_state,
       };
 
+      //todo: remove all parentCanvas'
+      //remove all target information except target ids
+
       try{
         localStorage.setItem('saveNames', JSON.stringify(saveNames));
         localStorage.setItem(name, JSON.stringify(this.appConfig));
@@ -531,15 +534,14 @@ export default {
     margin-bottom: 10px;
   }
 
-  .highlight {
+  /*.highlight {
     fill: rgba(246, 230, 80, 0.7);
     stroke: rgba(250, 240, 80, 0.8);
   }
-
   div.highlight {
     background-color: rgba(246, 230, 80, 0.7);
     border: 1px solid rgba(250, 240, 80, 0.8);
-  }
+  }*/
 
   .vjs-waiting {
     visibility: hidden;

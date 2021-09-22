@@ -38,9 +38,12 @@ function getFrameData(canvas, video, frame){
   return data;
 }
 
-function findUiBarTargets(config){
-  if(!config.hasOwnProperty('children'))  return [];
-  let groups = Object.values(config.children).filter(c => Object.keys(c.shape.points).length == 4).map(c => [c]);
+function findUiBarTargets(targets, config){
+  if(config.children === undefined) return [];
+  let groups = Object.keys(config.children)
+    .map(id => targets[id])
+    .filter(c => Object.keys(c.shape.points).length == 4)
+    .map(c => [c]);
   groups.forEach((c, i) => c[0].group = i);
   
   //horizontal bars
@@ -101,35 +104,37 @@ function boundsToCircle(dims){
 }
 
 //transform rows of buttons into mobile-friendly dropdown
-function createUIBarTargets(config, nconfig){
-  const uiBarTargets = findUiBarTargets(config);
+function createUIBarTargets(targets, ntargets, id){
+  const uiBarTargets = findUiBarTargets(targets, targets[id]);
   uiBarTargets.forEach(group => {
-
     let minX = Infinity;
     let maxX = 0;
     let minY = Infinity;
     let maxY = 0;
-    const ngroup = group.map(g => utils.shallowCopy(g));
-    for(const target of ngroup){
-      target.parent = nconfig.name;
-      target.parent_id = nconfig.id;
-      target.hide = true;
-      minX = Math.min(target.shape.dimensions.min_x, minX);
-      maxX = Math.max(target.shape.dimensions.max_x, maxX);
-      minY = Math.min(target.shape.dimensions.min_y, minY);
-      maxY = Math.max(target.shape.dimensions.max_y, maxY);
+
+    const ngroup = group.map(() => ({}));
+    for(const key in ngroup){
+      ngroup[key] = {};
+
+      minX = Math.min(group[key].shape.dimensions.min_x, minX);
+      maxX = Math.max(group[key].shape.dimensions.max_x, maxX);
+      minY = Math.min(group[key].shape.dimensions.min_y, minY);
+      maxY = Math.max(group[key].shape.dimensions.max_y, maxY);
     }
+    
+    const gids = Object.values(group).map(c => c.id);
+    const ngid = gids.join();
 
     const child = {
       actor: 'dropdown',
       type: 'linear',
       name: group.map(c => c.name).join('-'),
-      id: group[0].id, //todo: probably needs new uuid
-      parent: config.name,
-      parent_id: config.id,
-      children: group,
+      id: ngid,
+      parent: targets[id].name || 'root',
+      parent_id: targets[id].id !== undefined ? targets[id].id : '-1',
+      children: ngroup,
       frame_no: -1,
-      child_visit_counter: Object.keys(group).length,
+      child_visit_counter: Object.keys(ngroup).length,
       shape: {
         type: 'poly',
         points: {
@@ -146,51 +151,65 @@ function createUIBarTargets(config, nconfig){
         }
       }
     };
+    
+    gids.forEach(gid => ntargets[gid] = { 
+      hide: true,
+      parent_id: child.id,
+      parent: child.name,
+    });
 
-    const gids = Object.values(group).map(c => c.id);
-    nconfig.children[gids.join()] = child;
+    ntargets[ngid] = child;
   });
 }
 
 //transform rectangular buttons/hover events into circular ones
-function toCircleHover(config, nconfig){
+function toCircleHover(targets, ntargets, id){
   const actors = ["button", "hover"];
-  if(actors.includes(config.actor) && config.shape.points.length == 4){
-    if(!nconfig.shape) nconfig = utils.shallowCopy(config);
-    [nconfig.shape.points, nconfig.shape.dimensions] = boundsToCircle(config.shape.dimensions);  
+  if(actors.includes(targets[id].actor) && targets[id].shape.points.length == 4){
+    [points, dimensions] = boundsToCircle(targets[id].shape.dimensions);  
+    ntargets[id].shape = {
+      points, dimensions,
+    };
   }
-  return nconfig;
 }
 
 function traverseMobile(config, nconfig){
-  nconfig.children = {};
-  createUIBarTargets(config, nconfig);
-  nconfig = toCircleHover(config, nconfig);
+  const stack = [];
+  stack.push('-1')
 
-  config.children && Object.keys(config.children).forEach(key => {
-    nconfig.children[key] = nconfig.children[key] || {};
-    traverseMobile(config.children[key], nconfig.children[key]);
-  });
+  while(stack.length){
+    const id = stack.shift();
+    if(nconfig[id] === null)  continue;
+    
+    createUIBarTargets(config, nconfig, id);  //create new UIBarTargets and modify targetData to look like UIBar
+    toCircleHover(config, nconfig, id);       //change all rectangular hovers to circle clicks
+    
+    if(config[id].hasOwnProperty('children') && nconfig[id] !== null){
+      stack.push(...Object.keys(config[id].children));
+    }
+  }
 }
 
 function createMobileMode(config){
-  const nconfig = utils.shallowCopy(config);
-  nconfig.mode = 'mobile';
-  traverseMobile(config, nconfig); 
+  const nconfig = { 'mode': 'mobile' };
+  traverseMobile(utils.shallowCopy(config), nconfig); 
   return nconfig;
 }
   
 export default function(config, transform){
-  if(transform == config['original'].mode){
-    return {};  //no changes required, mode already exists
-  }
+  if(transform == config.mode)  return {};  //no changes required, mode already exists
 
+  let nconfig;
   switch(transform){
     case 'mobile':
-      return createMobileMode(config['original']);
+      nconfig = createMobileMode(config);
+      break;
     case 'desktop': 
-      return {} //todo
+      nconfig = {} //todo
+      break;
     default:
-      return {};
+      nconfig = {};
+      break;
   }
+  return nconfig;
 }

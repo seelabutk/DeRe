@@ -44,6 +44,7 @@
           :is="getComponent(target)" 
           :ref="'target' + target.id"
           :targetData="target"
+          :targets="targets"
           :showHint="overlay"
           :interactable="!regionSelect"
           :current_state="current_state"
@@ -203,11 +204,11 @@ export default {
       return undefined;//loomTarget
     },
 
-    changeState(target, offset = 0, changeParent = true){
-      this.changeStateWithFrameNo(target.frame_no, offset, changeParent);
+    changeState(target_id, offset = 0, changeParent=true, emit=true){
+      this.changeStateWithFrameNo(this.targets[target_id].frame_no, offset, changeParent, emit);
     }, 
 
-    changeStateWithFrameNo(frame, offset = 0, changeParent = true){
+    changeStateWithFrameNo(frame, offset=0, changeParent=true, emit=true){
 
       if(changeParent && this.updateParentCurrentState) this.$parent.changeStateWithFrameNo(frame, offset);
       this.current_state = Object.values(this.targets).find(o => o.frame_no == frame);
@@ -217,11 +218,11 @@ export default {
         img = cv.imread(this.$refs.canvas);
         this.hoverMapping[this.current_state.id] = {};
       }
-
+      
       const actualFrame = frame + 1 + offset;
       if(this.lastFrame == actualFrame) return;
 
-      this.$parent.changeVideoFrame(this.id, actualFrame)
+      this.$parent.changeVideoFrame(this.id, actualFrame, emit)
       this.lastFrame = actualFrame;
 
       if(img !== null && !this.targetData.processed){
@@ -609,7 +610,7 @@ export default {
     this.$nextTick(()=>{
       
       if(this.current_state){
-        this.changeState(this.current_state, 0, false);
+        this.changeState(this.current_state.id, 0, false);
         if(this.targetData.region){
           this.polygonMasks[this.current_state.id] = this.targetData.region;
         } else {
@@ -637,8 +638,6 @@ export default {
             left: minX,
             id: this.targetData.id,
           });
-
-          console.log(this.targetData.parentCanvas.targetData.cutouts)
 
           this.redraw();
         }

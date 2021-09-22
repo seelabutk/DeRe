@@ -1,21 +1,20 @@
 function currentTargets(current_state, targets){
   if(!current_state) return {};
-  return objectFilter(targets, target => {
-    return (findChild(target, current_state) != null ||
-     findSibling(target, current_state, targets) != null ||
+  const cts = objectFilter(targets, target => {
+    return (
+     isChild(current_state, target) ||
+     isSibling(targets, target, current_state) ||
      target.parent_id == '-1'
     ) && target.hide != true
   });
+  return cts;
 }
-function findByName(name, targets){
-  return Object.values(targets).find(t => t.name == name) || null;
+function isChild(cs, target){
+  if (!(cs && cs.hasOwnProperty("children"))) return false;
+  return Object.keys(cs.children).includes(String(target.id));
 }
-function findChild(needle, haystack){
-  if (!(haystack && haystack.hasOwnProperty("children"))) return null;
-  return Object.values(haystack.children).find(c => c.frame_no == needle.frame_no) || null;
-}
-function findSibling(target1, target2, targets){
-  return findChild(target1, targets[target2.parent_id] || findByName(target2.parent, targets)); //todo: fix fallback of findByName to never be needed
+function isSibling(targets, target1, target2){
+  return isChild(targets[target2.parent_id], target1);
 }
 
 function objectFilter(obj, fn){
@@ -34,6 +33,18 @@ function shallowCopy(obj){
   const nobj = {};
   Object.entries(obj).forEach(([key, value]) => {
     nobj[key] = value;
+  });
+  return nobj;
+}
+
+function shallowCopyPrimitivesOnly(obj, filler=undefined){
+  const nobj = {};
+  Object.keys(obj).forEach(key => {
+    if(obj[key] !== Object(obj[key])){
+      nobj[key] = obj[key];
+    } else if(filler !== undefined){
+      nobj[key] = filler;
+    }
   });
   return nobj;
 }
@@ -58,20 +69,31 @@ function deepCopy(obj){
 }
 
 function deepMerge(obj1, obj2){
-  if(obj1 === undefined)  return deepCopy(obj2);
-  if(obj2 === undefined)  return deepCopy(obj1);
 
-  let merged = {};
+  const cobj1 = deepCopy(obj1);
+  const cobj2 = deepCopy(obj2);
 
-  const keys = [...new Set(Object.keys(obj1).concat(Object.keys(obj2)))];
-  keys.forEach(key => {
-    if(obj1[key] === Object(obj1[key])){ //if primitive
-      merged[key] = obj2[key] || obj1[key];
-    } else {
-      merged[key] = deepMerge(obj1[key], obj2[key]);
-    }
-  });
-  return merged;
+  return (function merge(obj1, obj2){
+    let merged = {};
+    [...new Set(Object.keys(obj1).concat(Object.keys(obj2)))].forEach(key => {
+      if(obj2[key] === null){
+        //don't merge, do nothing
+      }else if(obj2[key] === undefined        // if undefined
+       || Object.keys(obj2[key]).length == 0  // if empty object
+       || obj1[key] !== Object(obj1[key])     // if obj1 primitive
+       || obj2[key] !== Object(obj2[key])     // if obj2 primitive
+       ){ 
+        merged[key] = obj2[key] !== undefined ? obj2[key] : obj1[key];
+      }else{
+        merged[key] = merge(obj1[key], obj2[key]);
+      }
+    });
+    return merged;
+  })(cobj1, cobj2);
+}
+
+function overwriteMerge(obj1, obj2){
+  
 }
 
 function absdiff(img1, img2){
@@ -146,16 +168,15 @@ function throttle (callback, limit, id=0) {
 export default {
   //loom utils
   currentTargets,
-  findByName,
-  findChild,
-  findSibling,
 
   //generic utils
   objectFilter,
   arrayToObject,
   shallowCopy,
+  shallowCopyPrimitivesOnly,
   deepCopy,
   deepMerge,
+  overwriteMerge,
   absdiff,
 
   //poly utils
