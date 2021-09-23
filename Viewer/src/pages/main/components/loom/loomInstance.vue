@@ -24,6 +24,7 @@
       :key="`${renderAppMode}-${videoTarget.id}`"
       :ref="`loomVideoCanvas-${videoTarget.id}`"
       :loomID="id"
+      :targets="targets"
       :targetData="videoTarget"
       :regionSelect="regionSelect"
       :overlay="overlay"
@@ -201,13 +202,12 @@ export default {
         for(let page of Object.values(mode)){
           for(let window of Object.values(page)){
             window.cutouts = window.cutouts || [];
-            window.targets = this.targets;
             window.processed = true;
             if(window.parentCanvas){
               this.$nextTick(() => {
-                window.parentCanvas = this.$refs[`loomVideoCanvas-${window.parentCanvas}`];
-                if(window.makeCutout && window.parentCanvas){
-                  window.parentCanvas.targetData.cutouts = window.parentCanvas.cutouts || [];
+                const pc = this.$refs[`loomVideoCanvas-${window.parentCanvas}`];
+                if(window.makeCutout && pc){
+                  pc.targetData.cutouts = window.parentCanvas.cutouts || [];
 
                   const region = window.region;
                   const minX = Math.min(...region.map(p => p.x));
@@ -215,7 +215,7 @@ export default {
                   const minY = Math.min(...region.map(p => p.y));
                   const maxY = Math.max(...region.map(p => p.y));
 
-                  const pcutouts = window.parentCanvas.targetData.cutouts;
+                  const pcutouts = pc.targetData.cutouts;
                   pcutouts.push({
                     poly: utils.polyToPolyString(region, 0, 0),
                     width: maxX-minX,

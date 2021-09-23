@@ -102,7 +102,7 @@ export default {
   name: 'loomVideoCanvas',
   emits: ['frame_processed'],
 
-  props: ['regionSelect', 'overlay', 'renderMode', 'dragMode', 'info', 'start_state_id', 'targetData', 'loomID'],
+  props: ['regionSelect', 'overlay', 'renderMode', 'dragMode', 'info', 'start_state_id', 'targets', 'targetData', 'loomID'],
   components: {
     loomTarget,
     loomButton,
@@ -123,7 +123,7 @@ export default {
       width: 0,
       height: 0,
       ctx: null,
-      current_state: Object.values(this.targetData.targets).find(t => t.id == this.start_state_id) || Object.values(this.targetData.targets)[1],
+      current_state: null,
       
       hoverMapping: {},
       polygonMasks: {},
@@ -136,7 +136,6 @@ export default {
   },
 
   computed: {
-    targets(){ return this.targetData.targets; },
     currentTargets(){ return utils.currentTargets(this.current_state, this.targets); },
     currentPolygonMask(){ 
       for(let cs = this.current_state; cs && !this.polygonMasks[cs.id] && cs.parent_id != cs.id; cs = this.targets[cs.parent_id]){
@@ -146,6 +145,8 @@ export default {
     },
     currentPolygonPath2D(){ return utils.polyToPath2D(this.currentPolygonMask,0,0); },
     currentPolygonMaskString(){ return utils.polyToPolyString(this.currentPolygonMask,0,0); },
+
+    parentCanvas(){ return this.$parent.$refs[`loomVideoCanvas-${this.targetData.parentCanvas}`] || false; },
 
     dragSelectStyle: function(){
       const top = Math.min(this.dragStart.y, this.dragCurr.y) + 'px';
@@ -311,9 +312,9 @@ export default {
     },
 
     cutRegions(regions, cutout = true, copyUI = true, hoverCutout = false){ 
-      if(!this.targetData.parentCanvas){ // auto-new canvas - create new loomVideoCanvas component
+      if(this.targetData.parentCanvas === undefined){ // auto-new canvas - create new loomVideoCanvas component
         this.$parent.newVideoTarget({
-          parentCanvas: this, 
+          parentCanvas: this.targetData.id, 
           startupFn: c => {
             c.cutRegions(regions, cutout, copyUI, hoverCutout);
             c.emitter.emit('deselect');
@@ -340,9 +341,8 @@ export default {
           top: this.targetData.top,
           left: this.targetData.left,
           makeCutout: cutout,
-          parentCanvas: this,
+          parentCanvas: this.targetData.id,
           cutouts: [],
-          targets: copyUI ? this.targets : [],
           startupFn: c => {
             c.current_state = this.current_state;
             c.emitter.emit('deselect');
@@ -369,8 +369,9 @@ export default {
       }
       this.currentPolygonMask[c] = e;
 
-      if(!this.targetData.parentCanvas || !this.targetData.parentCanvas.targetData.cutouts)  return;
-      const pcutouts = this.targetData.parentCanvas.targetData.cutouts;
+      const pc = this.parentCanvas;
+      if(!pc)  return;
+      const pcutouts = pc.targetData.cutouts;
       const cidx = pcutouts.findIndex(c => c.id == this.targetData.id);
       if(cidx >= 0){
         const newCutout = pcutouts[cidx];
@@ -605,6 +606,7 @@ export default {
     this.$refs.canvas.height = this.height;
     
     this.id = this.targetData.id
+    this.current_state = Object.values(this.targets).find(t => t.id == this.start_state_id) || Object.values(this.targets)[1];
 
     //nextTick ensures the videoTarget reference will be created by the time this code runs
     this.$nextTick(()=>{
@@ -621,7 +623,7 @@ export default {
             {x: 0, y: this.height}
           ];
         }
-        if(this.targetData.makeCutout && this.targetData.parentCanvas){
+        if(this.targetData.makeCutout && this.parentCanvas){
           const region = this.polygonMasks[this.current_state.id];
 
           const minX = Math.min(...region.map(p => p.x));
@@ -629,7 +631,7 @@ export default {
           const minY = Math.min(...region.map(p => p.y));
           const maxY = Math.max(...region.map(p => p.y));
 
-          const pcutouts = this.targetData.parentCanvas.targetData.cutouts;
+          const pcutouts = this.parentCanvas.targetData.cutouts;
           pcutouts.push({
             poly: utils.polyToPolyString(this.currentPolygonMask, 0, 0),
             width: maxX-minX,
@@ -660,9 +662,9 @@ export default {
 
   beforeUnmount(){
     //delete cutouts
-    if(this.targetData.parentCanvas && this.targetData.parentCanvas.targetData){
-      const id = this.targetData.parentCanvas.targetData.cutouts.findIndex(c => c.id == this.targetData.id);
-      if(id >= 0) this.targetData.parentCanvas.targetData.cutouts.splice(id, 1);
+    if(this.parentCanvas && this.parentCanvas.targetData){
+      const id = this.parentCanvas.targetData.cutouts.findIndex(c => c.id == this.targetData.id);
+      if(id >= 0) this.parentCanvas.targetData.cutouts.splice(id, 1);
     }
 
     //delete event listeners
