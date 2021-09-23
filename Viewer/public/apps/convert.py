@@ -351,8 +351,8 @@ if __name__ == "__main__":
     default_ofile = 'new_config.json'
 
     #temp overwrite
-    default_ifile = 'tableau/config.json'
-    default_ofile = 'tableau/new_config.json'
+    default_ifile = 'nytimes/config.json'
+    default_ofile = 'nytimes/new_config.json'
 
     parser = argparse.ArgumentParser()
     parser.add_argument('ifile', nargs='?', default=default_ifile)

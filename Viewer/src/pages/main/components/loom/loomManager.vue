@@ -143,7 +143,7 @@
         v-for="(directory, key) in directories"
         :key="key"
         :id="`loomInstance-${key}`"
-        :ref="`loomInstace-${key}`"
+        :ref="`loomInstance-${key}`"
         :directory=directory
         :videoTargetCache="appConfig"
         :regionSelect="regionSelect"
@@ -253,14 +253,14 @@ export default {
       const apps = this.appModes.map(am => ({selected: this.appMode.includes(am.value), ...am})).slice(0,this.directories.length);
       apps.forEach((app,i) => {
         const renderApp = {...app, renderMode: this.renderMode};
-        if(this.$refs[`loomInstace-${i}`])
-          this.$refs[`loomInstace-${i}`].init(renderApp);
+        if(this.$refs[`loomInstance-${i}`])
+          this.$refs[`loomInstance-${i}`].init(renderApp);
       });
     },
 
     newVideoTarget(obj=null){
-      if(this.$refs[`loomInstace-${this.currVideoCanvasSelected.id}`])
-        this.$refs[`loomInstace-${this.currVideoCanvasSelected.id}`].newVideoTarget(obj);
+      if(this.$refs[`loomInstance-${this.currVideoCanvasSelected.id}`])
+        this.$refs[`loomInstance-${this.currVideoCanvasSelected.id}`].newVideoTarget(obj, undefined, true);
     },
 
     cutRegion(){
@@ -404,8 +404,9 @@ export default {
     },
 
     Delete(){
-      if(this.$refs[`loomInstace-${this.currVideoCanvasSelected.loomID}`])
-        this.$refs[`loomInstace-${this.currVideoCanvasSelected.loomID}`].Delete(this.currVideoCanvasSelected);
+      if(this.$refs[this.currVideoCanvasSelected.loomID]){
+        this.$refs[this.currVideoCanvasSelected.loomID].Delete(this.currVideoCanvasSelected);
+      }
     },
     copy(){
       this.pasteBin = this.currVideoCanvasSelected;
@@ -422,8 +423,8 @@ export default {
       this.pasteBin = pasteBin;
     },
     paste(){
-      if(this.$refs[`loomInstace-${this.pasteBin.loomID}`])
-        this.$refs[`loomInstace-${this.pasteBin.loomID}`].paste(this.pasteBin.targetData);
+      if(this.$refs[this.pasteBin.loomID])
+        this.$refs[this.pasteBin.loomID].paste(this.pasteBin.targetData);
     },
   },
 

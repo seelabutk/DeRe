@@ -121,7 +121,7 @@ export default {
     videoTargets: function(){
       if(!this.current_state || !this.videoTargetCache[this.renderAppMode]) return null;
 
-      for(let cs = this.current_state; cs; cs = this.targets[cs.parent_id]){
+      for(let cs = this.current_state; cs && cs.id != cs.parent_id; cs = this.targets[cs.parent_id]){
         if(typeof cs.frame_no === "string" && cs.frame_no.includes("frameless")) continue;
 
         const vts = Object.entries(this.videoTargetCache[this.renderAppMode]);
@@ -159,16 +159,14 @@ export default {
     load(){
       if(this.loaded) return Promise.resolve([this.config, this.$parent.appConfig]);
       return Promise.all([
-          fetch(this.directory + '/' + this.config_filename),
-          fetch(this.directory + '/' + this.vtc_filename),
-        ])
-        .then(([r1, r2]) => Promise.all([r1.text(), r2.text()]))
-        .then(([config, vtc]) => [JSON.parse(config), JSON.parse(vtc)])
-        .then(([config, vtc]) => {
+          fetch(this.directory + '/' + this.config_filename).then(res => res.text()).then(config => JSON.parse(config)),
+          fetch(this.directory + '/' + this.vtc_filename)   .then(res => res.text()).then(vtc    => JSON.parse(vtc   )).catch(e => null)
+        ]).then(([config, vtc]) => {
           if(config.info['version'] != loomConfig['version']){
             console.error('ERROR, out of version config file, run Recorder/convert.py');
             return;
           }
+
           this.config = config;
           this.currentConfig = this.config.hasOwnProperty(this.renderAppMode) ? this.config[this.renderAppMode] : this.config['original'];
           this.loaded = true;
@@ -197,6 +195,7 @@ export default {
     },
 
     init_videoTargetCache(cvt_config){
+      if(!cvt_config) return;
       const vt_config = utils.deepCopy(cvt_config);
       for(let mode of Object.values(vt_config)){
         for(let page of Object.values(mode)){
@@ -272,7 +271,7 @@ export default {
       }
     },
     
-    newVideoTarget(obj={}, mode=undefined){
+    newVideoTarget(obj={}, mode=undefined, clear=false){
       if(mode === undefined)  mode = this.renderAppMode;
 
       let id = '-1';
@@ -288,7 +287,7 @@ export default {
         height: this.config.info.window.height,
       });
 
-      if(!this.videoTargetCache[mode][id])
+      if(!this.videoTargetCache[mode][id] || clear)
         this.videoTargetCache[mode][id] = {};
 
       const len = Object.keys(this.videoTargetCache[mode][id]).length;
@@ -300,7 +299,6 @@ export default {
         makeCutout: true,
         parentCanvas: true,
         cutouts: [],
-        targets: this.targets,
         startupFn: null,
         processed: true,
         ...obj //to overwrite preceding values
@@ -374,19 +372,20 @@ export default {
     Delete(videoCanvas){
       let id = null;
       if(videoCanvas === null && this.videoTargets !== null) {
-        id = this.videoTargets.findIndex(vt => String(vt.id) == '-1');
+        id = '-1';
       }else if(videoCanvas){
-        id = this.videoTargets.findIndex(vt => String(vt.id) == videoCanvas.id);
+        id = videoCanvas.id;
       } 
-      if(id !== null)  this.videoTargets.splice(id, 1);
+      if(id !== null)  delete this.videoTargets[id];
     },
+
     paste(pasteBin){
       if(pasteBin) {
         const fn = pasteBin.startupFn;
         const copy = JSON.parse(JSON.stringify(pasteBin)); //utils.deepCopy(this.pasteBin); //TODO: vue complains about enumerating keys on components here
-        copy.startupFn = (c) => { c.updateParentCurrentState = false; if(fn) c.fn(c);}
+        copy.startupFn = (c) => { c.updateParentCurrentState = false; if(fn) fn(c);}
         copy.id = copy.id + '_copy';
-        this.videoTargets.push(copy);
+        this.videoTargets[copy.id] = copy
       }
     },
 
