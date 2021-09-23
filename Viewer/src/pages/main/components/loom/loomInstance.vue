@@ -157,7 +157,7 @@ export default {
     },
 
     load(){
-      if(this.loaded) return Promise.resolve();
+      if(this.loaded) return Promise.resolve([this.config, this.$parent.appConfig]);
       return Promise.all([
           fetch(this.directory + '/' + this.config_filename),
           fetch(this.directory + '/' + this.vtc_filename),

@@ -332,7 +332,7 @@ export default {
 
       this.appConfig['startState'] = {
         appMode: this.appMode,
-        current_state: this.current_state.id,
+        current_state: this.current_state,
       };
 
       try{
@@ -363,6 +363,8 @@ export default {
   
       this.current_state = this.appConfig['startState']['current_state'];
       this.appMode = this.appConfig['startState']['appMode'];
+
+      delete this.appConfig['startState'];
 
       this.init();
     },
