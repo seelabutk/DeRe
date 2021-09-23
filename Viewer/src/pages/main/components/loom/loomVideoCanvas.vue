@@ -138,8 +138,8 @@ export default {
   computed: {
     currentTargets(){ return utils.currentTargets(this.current_state, this.targets); },
     currentPolygonMask(){ 
-      for(let cs = this.current_state; cs && !this.polygonMasks[cs.id] && cs.parent_id != cs.id; cs = this.targets[cs.parent_id]){
-        if(cs && this.polygonMasks[cs.id]) return this.polygonMasks[this.current_state.id];
+      for(let cs = this.current_state; cs && cs.parent_id != cs.id; cs = this.targets[cs.parent_id]){
+        if(this.polygonMasks[cs.id]) return this.polygonMasks[cs.id];
       }
       return Object.values(this.polygonMasks)[0];
     },
@@ -370,7 +370,10 @@ export default {
       this.currentPolygonMask[c] = e;
 
       const pc = this.parentCanvas;
-      if(!pc)  return;
+      if(!pc){
+        this.redraw(); 
+        return;
+      }
       const pcutouts = pc.targetData.cutouts;
       const cidx = pcutouts.findIndex(c => c.id == this.targetData.id);
       if(cidx >= 0){
@@ -424,9 +427,8 @@ export default {
       return {x: e.clientX - left - this.targetData.left, y: e.clientY - top - this.targetData.top};
     },
   
-    onVideoMouseMove(e){
+    onScreenMouseMove(e){
       this.mouseLoc = this.clientToOffset(e);
-      
       if(this.resizePolygonMode){
         this.resizePolygon(this.mouseLoc);
         return;
@@ -447,23 +449,25 @@ export default {
       }
     },
 
-    onVideoMouseDown(e){
-      document.body.style.cursor = 'default';
-      this.selected = true;
-      this.mouseLoc = this.clientToOffset(e);
-      
-      const resizePoly = this.isPolygonVertexHovered(this.mouseLoc);
+    onScreenMouseDown(e){
+      let mouseLoc = this.clientToOffset(e);
+      const resizePoly = this.isPolygonVertexHovered(mouseLoc);
       if(resizePoly >= 0){
         this.resizePolygonMode = true;
         this.polygonResizeIdx = resizePoly;
       }
 
-      const newVertex = this.isPolygonLineHovered(this.mouseLoc);
+      const newVertex = this.isPolygonLineHovered(mouseLoc);
       if(newVertex >= 0 && resizePoly < 0){  
-        this.addNewVertex(newVertex, this.mouseLoc);
+        this.addNewVertex(newVertex, mouseLoc);
         this.redraw();
       }
+    },
 
+    onVideoMouseDown(e){
+      document.body.style.cursor = 'default';
+      this.selected = true;
+      this.mouseLoc = this.clientToOffset(e);
       if(!this.dragMode){
         this.dragCurr = this.dragStart = this.mouseLoc;
       }else{
@@ -476,7 +480,7 @@ export default {
       return false;
     },
 
-    onVideoMouseUp(e){
+    onScreenMouseUp(e){
       this.dragging = false;
       this.selected = false;
       this.resizePolygonMode = false;
@@ -507,8 +511,7 @@ export default {
     },
 
     redraw(emit=false){
-      this.emitter.emit('changeVideoFrame', this.loomID, this.id, this.lastFrame, emit);
-      //this.$parent.changeVideoFrame(this.id, this.lastFrame, emit);
+      this.emitter.emit('changeVideoFrame', [this.loomID, this.id, this.lastFrame, emit]);
     },
 
     draw(videoPlayer, emit = true){
@@ -529,6 +532,7 @@ export default {
         this.width*xVideoRatio, this.height*yVideoRatio, 
         0, 0, this.width, this.height
       );
+
       if(!this.dragMode && this.currentPolygonMask){
         this.drawPolyOutline(this.ctx, this.currentPolygonMask);
       }
@@ -652,8 +656,9 @@ export default {
       this.emitter.on('clearSelection', this.clearSelection);
       this.emitter.on('deselect', this.deselect);
       this.emitter.on(`changeState-${this.targetData.id}`, this.changeState);
-      this.emitter.on('mousemove', this.onVideoMouseMove);
-      this.emitter.on('mouseup', this.onVideoMouseUp);
+      this.emitter.on('mousemove', this.onScreenMouseMove);
+      this.emitter.on('mouseup', this.onScreenMouseUp);
+      this.emitter.on('mousedown', this.onScreenMouseDown);
 
       this.selected = true;
       this.emitter.emit("selectVideoCanvas", this);
@@ -671,8 +676,9 @@ export default {
     this.emitter.off('clearSelection', this.clearSelection);
     this.emitter.off('deselect', this.deselect);
     this.emitter.off(`changeState-${this.targetData.id}`, this.changeState);
-    this.emitter.off('mousemove', this.onVideoMouseMove);
-    this.emitter.off('mouseup', this.onVideoMouseUp);
+    this.emitter.off('mousemove', this.onScreenMouseMove);
+    this.emitter.off('mouseup', this.onScreenMouseUp);
+    this.emitter.off('mousedown', this.onScreenMouseDown);
   },
   
 }

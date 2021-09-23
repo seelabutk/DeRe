@@ -393,8 +393,8 @@ export default {
             this.$refs[`loomInstance-${cid}`].changeVideoFrame(id, lastFrame, emit);
         });
       } else {
-        if(this.$refs[`loomInstance-${instance}`])
-          this.$refs[`loomInstance-${instance}`].changeVideoFrame(id, lastFrame, emit);
+        if(this.$refs[instance])
+          this.$refs[instance].changeVideoFrame(id, lastFrame, emit);
       }
     },
 
@@ -436,7 +436,7 @@ export default {
       this.regionOrigin = e.origin;
     });
     this.emitter.on("selectVideoCanvas", vc => this.currVideoCanvasSelected = vc );
-    this.emitter.on('changeVideoFrame', this.changeVideoFrame);
+    this.emitter.on('changeVideoFrame', t => this.changeVideoFrame(...t));
     
     
     //set up initial render and app modes

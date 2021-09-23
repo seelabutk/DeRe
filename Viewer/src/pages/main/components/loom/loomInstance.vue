@@ -308,6 +308,7 @@ export default {
 
 
     changeVideoFrame(videoCanvasID, frameNo, emit=true){
+      if(!frameNo && frameNo !== 0) return
       const vp = this.videoPlayers[this.lastUsedVideoPlayer];
       this.lastUsedVideoPlayer = (this.lastUsedVideoPlayer+1)%this.numVideoPlayers;
       const self = this;

@@ -19,6 +19,9 @@ export default {
       document.body.style.cursor = 'default';
       this.emitter.emit('mouseup', e);
     });
+    window.addEventListener("mousedown", e => {
+      this.emitter.emit('mousedown', e);
+    })
   }
 };
 
