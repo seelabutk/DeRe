@@ -202,7 +202,7 @@ export default {
           for(let window of Object.values(page)){
             window.cutouts = window.cutouts || [];
             window.processed = true;
-            if(window.parentCanvas){
+            if(window.parentCanvas && window.parentCanvas != '-1'){
               this.$nextTick(() => {
                 const pc = this.$refs[`loomVideoCanvas-${window.parentCanvas}`];
                 if(window.makeCutout && pc){

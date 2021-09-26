@@ -241,7 +241,7 @@ export default {
             rect = this.hoverMapping[this.current_state.id].rect;
           }
 
-          if(rect){
+          if(rect){ //TODO: ERROR HERE - rect here contains left, top, right bottom - needs to contain x, y, width, height
             rect = utils.rectToPoly(rect);
             this.cutRegions(rect, false, false, true);
           }
@@ -287,9 +287,7 @@ export default {
       rects = rects.filter(r => r.width * r.height > 500 && dist(r, this.mouseLoc) < 200) //filter out small regions      
         .sort((a, b) => dist(a, this.mouseLoc) - dist(b, this.mouseLoc));                 //sort by distance to mouse
 
-      const rect = rects[0];
-      if(rect) return { left: rect.x, top: rect.y, right: rect.x + rect.width, bottom: rect.y + rect.height };
-      else return null;
+      return rects[0] || null;
     },
 
     addHistory(t, e){ this.$parent.updateInteractionHistory(t, e, this.targetData.id); },
@@ -312,7 +310,7 @@ export default {
     },
 
     cutRegions(regions, cutout = true, copyUI = true, hoverCutout = false){ 
-      if(this.targetData.parentCanvas === undefined){ // auto-new canvas - create new loomVideoCanvas component
+      if(!this.targetData.parentCanvas){ // auto-new page - create new loomVideoCanvas component
         this.$parent.newVideoTarget({
           parentCanvas: this.targetData.id, 
           startupFn: c => {

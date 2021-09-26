@@ -163,13 +163,10 @@ import loomInstance from './loomInstance.vue'
 
 // TODOs: 
 // make "children" flat array, not weird empty object keyed on id
-// fix saving to use transformedTargetCache's
 
 // linking videoCanvases
 //    create link mapping and automation for it somehow
 // z-index adjuster
-// better dragging for videoCanvas'
-
 
 // auto-generate app based on user interaction
 // create api for auto generating apps
