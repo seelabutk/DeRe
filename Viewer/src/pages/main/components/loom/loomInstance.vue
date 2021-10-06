@@ -21,7 +21,7 @@
     />
     <loom-video-canvas
       v-for="videoTarget in videoTargets"
-      :key="`${renderAppMode}-${videoTarget.id}`"
+      :key="`${renderAppMode}-${videoTarget.id}-${videoTarget.page}`"
       :ref="`loomVideoCanvas-${videoTarget.id}`"
       :loomID="id"
       :targets="targets"
@@ -120,19 +120,27 @@ export default {
     },
     videoTargets: function(){
       if(!this.current_state || !this.videoTargetCache[this.renderAppMode]) return null;
-
-      for(let cs = this.current_state; cs && cs.id != cs.parent_id; cs = this.targets[cs.parent_id]){
+      let vt = null
+      
+      for(let cs = this.current_state; vt === null && cs && cs.id != cs.parent_id; cs = this.targets[cs.parent_id]){
         if(typeof cs.frame_no === "string" && cs.frame_no.includes("frameless")) continue;
 
         const vts = Object.entries(this.videoTargetCache[this.renderAppMode]);
         for(let i = 0; i < vts.length; ++i){
           if(String(cs.id) === vts[i][0]){
-            return vts[i][1];
+            vt = vts[i][1];
+            break;
           }
         }
+
       }
-      return this.videoTargetCache[this.renderAppMode]['-1'];   //return root
+      if(vt === null){
+        vt = this.videoTargetCache[this.renderAppMode]['-1'];   //return root
+      }
+      return vt;
     },
+
+    
   },
 
   methods: {
@@ -274,11 +282,11 @@ export default {
     newVideoTarget(obj={}, mode=undefined, clear=false){
       if(mode === undefined)  mode = this.renderAppMode;
 
-      let id = '-1';
+      let page = '-1';
       if(!this.videoTargetCache.hasOwnProperty(mode)){
         this.videoTargetCache[mode] = {};
       }else{
-        id = String(this.current_state.id);
+        page = String(this.current_state.id);
       }
 
       const region = utils.rectToPoly({
@@ -287,17 +295,18 @@ export default {
         height: this.config.info.window.height,
       });
 
-      if(!this.videoTargetCache[mode][id] || clear)
-        this.videoTargetCache[mode][id] = {};
+      if(!this.videoTargetCache[mode][page] || clear)
+        this.videoTargetCache[mode][page] = {};
 
-      const len = Object.keys(this.videoTargetCache[mode][id]).length;
-      this.videoTargetCache[mode][id][len] = {
+      const id = String(Object.keys(this.videoTargetCache[mode][page]).length);
+      this.videoTargetCache[mode][page][id] = {
+        page,
         id,
         region,
         top: 0,
         left: 0,
-        makeCutout: true,
-        parentCanvas: true,
+        makeCutout: false,
+        parentCanvas: false,
         cutouts: [],
         startupFn: null,
         processed: true,
@@ -383,7 +392,7 @@ export default {
     paste(pasteBin){
       if(pasteBin) {
         const fn = pasteBin.startupFn;
-        const copy = JSON.parse(JSON.stringify(pasteBin)); //utils.deepCopy(this.pasteBin); //TODO: vue complains about enumerating keys on components here
+        const copy = utils.deepCopy(pasteBin);
         copy.startupFn = (c) => { c.updateParentCurrentState = false; if(fn) fn(c);}
         copy.id = copy.id + '_copy';
         this.videoTargets[copy.id] = copy

@@ -241,7 +241,7 @@ export default {
             rect = this.hoverMapping[this.current_state.id].rect;
           }
 
-          if(rect){ //TODO: ERROR HERE - rect here contains left, top, right bottom - needs to contain x, y, width, height
+          if(rect){
             rect = utils.rectToPoly(rect);
             this.cutRegions(rect, false, false, true);
           }
@@ -310,6 +310,8 @@ export default {
     },
 
     cutRegions(regions, cutout = true, copyUI = true, hoverCutout = false){ 
+
+      
       if(!this.targetData.parentCanvas){ // auto-new page - create new loomVideoCanvas component
         this.$parent.newVideoTarget({
           parentCanvas: this.targetData.id, 
@@ -334,6 +336,7 @@ export default {
         }
 
         this.$parent.videoTargets[id] = {
+          page: this.targetData.page,
           id,
           region,
           top: this.targetData.top,
@@ -666,7 +669,7 @@ export default {
   beforeUnmount(){
     //delete cutouts
     if(this.parentCanvas && this.parentCanvas.targetData){
-      const id = this.parentCanvas.targetData.cutouts.findIndex(c => c.id == this.targetData.id);
+      const id = this.parentCanvas.targetData.cutouts.findIndex(c => c.id === this.targetData.id);
       if(id >= 0) this.parentCanvas.targetData.cutouts.splice(id, 1);
     }
 
