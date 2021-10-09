@@ -16,7 +16,7 @@
       <canvas
         ref="canvas"
         style="width: 100%; height: 100%;"
-        @click="dragging=false"
+        @click=" dragging=false; emitter.emit('clickVideoCanvas'); "
         @mousedown="onVideoMouseDown"
         @mouseleave="dragging=false"
       />
@@ -89,7 +89,7 @@
 // TODO: attempt to put all hoverCanvas logic into loomHover.vue?
 // TODO: resizing, editing black cutout regions (moving, polygon, etc)
 
-import utils from './loomComponents/utils.js'
+import utils from './utils/utils.js'
 
 import loomConfig from './loomConfig.json'
 import loomBrushingBox from './loomComponents/loomBrushingBox.vue'
@@ -102,7 +102,7 @@ export default {
   name: 'loomVideoCanvas',
   emits: ['frame_processed'],
 
-  props: ['regionSelect', 'overlay', 'renderMode', 'dragMode', 'info', 'start_state_id', 'targets', 'targetData', 'loomID'],
+  props: ['regionSelect', 'overlay', 'renderMode', 'dragMode', 'info', 'start_state_id', 'targets', 'targetData', 'instanceID'],
   components: {
     loomTarget,
     loomButton,
@@ -223,7 +223,8 @@ export default {
       const actualFrame = frame + 1 + offset;
       if(this.lastFrame == actualFrame) return;
 
-      this.$parent.changeVideoFrame(this.id, actualFrame, emit)
+      //this.$parent.changeVideoFrame(this.id, actualFrame, emit)
+      this.emitter.emit('changeVideoFrame', [this.instanceID, this.id, actualFrame, emit]);
       this.lastFrame = actualFrame;
 
       if(img !== null && !this.targetData.processed){
@@ -512,7 +513,7 @@ export default {
     },
 
     redraw(emit=false){
-      this.emitter.emit('changeVideoFrame', [this.loomID, this.id, this.lastFrame, emit]);
+      this.emitter.emit('changeVideoFrame', [this.instanceID, this.id, this.lastFrame, emit]);
     },
 
     draw(videoPlayer, emit = true){

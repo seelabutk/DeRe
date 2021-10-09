@@ -14,7 +14,6 @@
 
 <script>
 import loomBase from './loomBase'
-import utils from './utils'
 export default {
   name: 'loomDropdown',
   mixins: [loomBase],

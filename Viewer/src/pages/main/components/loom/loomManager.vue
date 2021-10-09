@@ -96,8 +96,8 @@
 
         <!-- LINK TARGET - push once for enable linking, again to complete linking !-->
         <div style='grid-area: link' :style="linkVideoCanvasStyle">
-          <span class="text">{{linkMode == 'linking' ? 'link to' : 'link'}}</span> <br>
-         <font-awesome-icon icon="link" @click="linkVideoCanvas"/>
+          <span class="text">{{linkData.linkMode == 'linking' ? 'linking' : linkData.linkMode == 'linkingTo' ? 'link to' : 'link'}}</span> <br>
+         <font-awesome-icon icon="link" @click="() => { if(linkData.linkMode == 'selectable') linkData.linkMode = 'linking' }"/>
         </div>
         <!-- CREATE NEW CUTOUT TARGET FOR CURRENT FRAME !-->
 
@@ -120,30 +120,14 @@
         class="form-control input-search" 
         placeholder="Search"
       />
-
-      <!--<table class="table-striped search-results-table">
-        <thead>
-        <tr>
-          <th>State</th>
-        </tr>
-        </thead>
-        <tbody>
-          <tr 
-            v-for="r in searchResults"
-            :key="r.item.id"
-          >
-            <td @click="highlightTarget">{{r.item.name}}</td>
-          </tr>
-        </tbody>
-      </table>!-->
     </div>
 
     <div>
       <loom-instance
         v-for="(directory, key) in directories"
-        :key="key"
-        :id="`loomInstance-${key}`"
-        :ref="`loomInstance-${key}`"
+        :key="String(key)"
+        :id="String(key)"
+        :ref="String(key)"
         :directory=directory
         :videoTargetCache="appConfig"
         :regionSelect="regionSelect"
@@ -157,16 +141,15 @@
 </template>
 
 <script>
-import Fuse from 'fuse.js'
 import Multiselect from '@vueform/multiselect'
 import loomInstance from './loomInstance.vue'
+import DSet from './utils/disjointset.js'
 
 // TODOs: 
-// make "children" flat array, not weird empty object keyed on id
+// (?)maybe(?) make "children" flat array, not weird empty object keyed on id
 
-// linking videoCanvases
-//    create link mapping and automation for it somehow
 // z-index adjuster
+// add frame mappings/instance mappings to vtcs
 
 // auto-generate app based on user interaction
 // create api for auto generating apps
@@ -198,9 +181,12 @@ export default {
       regionOrigin: null,
       currVideoCanvasSelected: null,
       pasteBin: null,
-      linkMode: 'none',
+      linkData: {
+        linkMode: 'selectable',
+        firstLink: null,
+        linkedCanvases: new DSet(),
+      },
       searchResults: [],
-      linkedCanvases: {},
       appConfig: {},
       //settings
       loomMenuWidth: 120,
@@ -219,30 +205,29 @@ export default {
     },
 
     linkVideoCanvasStyle: function(){
-      if(this.linkMode == 'none'){
+      if(this.linkData.linkMode == 'none'){
         return {
           color: 'grey',
           cursor: 'default',
         };
       }
-      else if(this.linkMode == 'selectable'){
+      else if(this.linkData.linkMode == 'selectable'){
         return {
           color: 'white',
           cursor: 'pointer',
         };
-      }else if(this.linkMode == 'linking'){
+      }else if(this.linkData.linkMode == 'linking'){
         return {
           color: 'green',
           cursor: 'pointer',
         };
+      }else if(this.linkData.linkMode == 'linkingTo'){
+        return {
+          color: 'red',
+          cursor: 'pointer',
+        }
       }
     },
-  },
-
-  watch: {
-    currVideoCanvasSelected: function(v){
-      if(v) this.linkMode = 'selectable';
-    }
   },
 
   methods: {
@@ -250,45 +235,20 @@ export default {
       const apps = this.appModes.map(am => ({selected: this.appMode.includes(am.value), ...am})).slice(0,this.directories.length);
       apps.forEach((app,i) => {
         const renderApp = {...app, renderMode: this.renderMode};
-        if(this.$refs[`loomInstance-${i}`])
-          this.$refs[`loomInstance-${i}`].init(renderApp);
+        if(this.$refs[i])
+          this.$refs[i].init(renderApp);
       });
     },
 
     newVideoTarget(obj=null){
-      if(this.$refs[`loomInstance-${this.currVideoCanvasSelected.id}`])
-        this.$refs[`loomInstance-${this.currVideoCanvasSelected.id}`].newVideoTarget(obj, undefined, true);
+      if(this.$refs[this.currVideoCanvasSelected.id])
+        this.$refs[this.currVideoCanvasSelected.id].newVideoTarget(obj, undefined, true);
     },
 
     cutRegion(){
       this.dragMode = true;
       this.$refs.SelectMode.checked = false;
       this.regionOrigin.cutSelectedRegion();
-    },
-    
-    inputSearch(e){
-      let term = e.target.value;
-      let options = {
-        shouldSort: true,
-        tokenize: true,
-        threshold: 0.3,
-        location: 0,
-        distance: 100,
-        maxPatternLength: 32,
-        minMatchCharLength: 1,
-        keys: [
-          "description",
-          "name"
-        ],
-      };
-
-      let results = [];
-      for (let i in this.targets){
-        let result = (new Fuse([this.targets[i]], options)).search(term); 
-        if (Object.keys(result).length > 0)
-          results.push(result[Object.keys(result)[0]]);
-      }
-      this.searchResults = results;
     },
 
     toggleRegion(e){
@@ -366,32 +326,61 @@ export default {
       this.init();
     },
 
-    linkVideoCanvas(){
-      //TODO
-      if(!this.currVideoCanvasSelected){
-        this.linkMode = 'none';
-        return;
-      };
-
-      if(this.linkMode == 'selectable'){
-        this.linkMode = 'linking';
-        return;
-      }
-      if(this.linkMode == 'linking'){
-        this.linkMode = 'none';
-        return;
-      }
+    videoCanvasClicked(){
+      this.linkVideoCanvas();
+      if(this.linkData.linkMode === 'linking') this.linkData.linkMode = 'linkingTo';
+      else if(this.linkData.linkMode == 'linkingTo') this.linkData.linkMode = 'selectable';
     },
 
-    changeVideoFrame(instance, id, lastFrame, emit){
-      if(this.linkedCanvases[instance]){
-        this.linkedCanvases[instance].forEach(cid => {
-          if(this.$refs[`loomInstance-${cid}`])
-            this.$refs[`loomInstance-${cid}`].changeVideoFrame(id, lastFrame, emit);
+    linkVideoCanvas(){
+      if(this.linkData.linkMode != 'linking' && this.linkData.linkMode != 'linkingTo')  return;
+
+      const instance = this.currVideoCanvasSelected.instanceID;
+      const vcid = this.currVideoCanvasSelected.id;
+      const frame = this.currVideoCanvasSelected.lastFrame;
+
+      let addLVC = (name) => {
+        if(!this.linkData.linkedCanvases.exists(name)){
+          const data = {instance, vcid, frame};
+          this.linkData.linkedCanvases.add(name, data);
+        }
+      }
+
+      if(this.linkData.linkMode == 'linking'){
+        const name = `${instance}-${vcid}`;
+        this.linkData.firstLink = name;
+        addLVC(name);
+        return;
+      }
+
+      if(this.linkData.linkMode == 'linkingTo'){
+        const name = `${instance}-${vcid}`;
+        addLVC(name);
+        if(this.linkData.linkedCanvases.exists(this.linkData.firstLink)){
+          this.linkData.linkedCanvases.merge(this.linkData.firstLink, name);
+        }
+        this.linkData.firstLink = null;
+        return;
+      }
+      
+    },
+
+    changeVideoFrame(instance, vcid, frame, emit){
+      if(this.linkData.linkedCanvases.exists(`${instance}-${vcid}`)){
+        this.linkData.linkedCanvases.of(`${instance}-${vcid}`).forEach(d => {
+          if(this.$refs[d.instance]){
+            if(d.instance != instance){
+              //todo: will need frame mappings for cross-instance frames
+              return;
+            }
+
+            this.$refs[d.instance].changeVideoFrame(d.vcid, /* d.frame */ frame, emit);
+          }
         });
       } else {
-        if(this.$refs[instance])
-          this.$refs[instance].changeVideoFrame(id, lastFrame, emit);
+        if(this.$refs[instance]){
+          this.$refs[instance].changeVideoFrame(vcid, frame, emit);
+        }
       }
     },
 
@@ -428,10 +417,12 @@ export default {
   mounted(){
     window.app = this;
     //set up events
+    //todo: unbind mounted events (not really necessary since app closes when unmount occurs)
     this.emitter.on("regionExists", e => {
       this.regionExists = e.exists;
       this.regionOrigin = e.origin;
     });
+    this.emitter.on("clickVideoCanvas", this.videoCanvasClicked);
     this.emitter.on("selectVideoCanvas", vc => this.currVideoCanvasSelected = vc );
     this.emitter.on('changeVideoFrame', t => this.changeVideoFrame(...t));
     
@@ -462,7 +453,6 @@ export default {
 </script>
 
 <style src="@vueform/multiselect/themes/default.css"></style>
-
 <style scoped>
 #loom-menu {
     border-radius: 0 10px 10px 0;
@@ -530,15 +520,6 @@ export default {
     border-bottom: 1px solid #ccc;
     margin-bottom: 10px;
   }
-
-  /*.highlight {
-    fill: rgba(246, 230, 80, 0.7);
-    stroke: rgba(250, 240, 80, 0.8);
-  }
-  div.highlight {
-    background-color: rgba(246, 230, 80, 0.7);
-    border: 1px solid rgba(250, 240, 80, 0.8);
-  }*/
 
   .vjs-waiting {
     visibility: hidden;

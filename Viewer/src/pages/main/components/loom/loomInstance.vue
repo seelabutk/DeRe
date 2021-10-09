@@ -23,7 +23,7 @@
       v-for="videoTarget in videoTargets"
       :key="`${renderAppMode}-${videoTarget.id}-${videoTarget.page}`"
       :ref="`loomVideoCanvas-${videoTarget.id}`"
-      :loomID="id"
+      :instanceID="id"
       :targets="targets"
       :targetData="videoTarget"
       :regionSelect="regionSelect"
@@ -46,7 +46,7 @@ import 'video.js/dist/video-js.min.css'
 import loomConfig from './loomConfig.json'
 import transformMode from './transforms.js'
 import loomVideoCanvas from './loomVideoCanvas.vue'
-import utils from './loomComponents/utils.js'
+import utils from './utils/utils.js'
 
 export default {
   name: 'LoomInstance',
@@ -101,7 +101,7 @@ export default {
     videoPlayers: [],
     //history
     interactionHistory: [],
-    maxHistoryLength: 100,
+    maxHistoryLength: 30,
 
 
     numVideoPlayers: 3,

@@ -29,7 +29,7 @@
 */
 
 import loomConfig from './loomConfig.json'
-import utils from './loomComponents/utils'
+import utils from './utils/utils.js'
 
 function getFrameData(canvas, video, frame){
   const context = canvas.getContext('2d');
