@@ -4,7 +4,13 @@
     :style="{
       height: config ? config.info.window.height + 'px' : '0px',
       width:  config ? config.info.window.width  + 'px' : '0px',
-      outline: regionSelect ? 'dashed white' : 'none',
+      position: 'absolute',
+      'margin-left': 'auto',
+      'margin-right': 'auto',
+      left: 0,
+      right: 0,
+      'text-align': 'center',
+      'pointer-events': 'none'
     }"
   >
     <!-- global list of video tags!-->
@@ -28,7 +34,8 @@
       :targetData="videoTarget"
       :regionSelect="regionSelect"
       :overlay="overlay"
-      :renderMode="renderAppMode"
+      :renderMode="renderMode"
+      :renderAppMode="renderAppMode"
       :currentConfig="currentConfig"
       :info="config.info"
       :start_state_id="current_state.id"
@@ -47,6 +54,7 @@ import loomConfig from './loomConfig.json'
 import transformMode from './transforms.js'
 import loomVideoCanvas from './loomVideoCanvas.vue'
 import utils from './utils/utils.js'
+import { render } from '@vue/runtime-dom'
 
 export default {
   name: 'LoomInstance',
@@ -66,6 +74,9 @@ export default {
       type: String,
       default: 'vtc.json'
     },
+    renderMode: {
+      type: String,
+    },
     videoTargetCache: {
       type: Object,
       default: {}
@@ -84,6 +95,9 @@ export default {
       type: Boolean,
     },
     id: {
+      type: String,
+    },
+    name: {
       type: String,
     }
   },
@@ -196,51 +210,85 @@ export default {
         }
         this.targetCacheModeChange(this.renderAppMode, m.renderMode);
         this.current_state = Object.values(this.targets).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[0];
-        this.init_videoTargetCache(vtc);
+        this.init_videoTargetCache(vtc, m.value, m.renderMode);
         this.videoCacheModeChange(this.renderAppMode);
         this.changeState(this.current_state.id);
       });
     },
 
-    init_videoTargetCache(cvt_config){
-      if(!cvt_config) return;
-      const vt_config = utils.deepCopy(cvt_config);
-      for(let mode of Object.values(vt_config)){
-        for(let page of Object.values(mode)){
-          for(let window of Object.values(page)){
-            window.cutouts = window.cutouts || [];
-            window.processed = true;
-            if(window.parentCanvas && window.parentCanvas != '-1'){
-              this.$nextTick(() => {
-                const pc = this.$refs[`loomVideoCanvas-${window.parentCanvas}`];
-                if(window.makeCutout && pc){
-                  pc.targetData.cutouts = window.parentCanvas.cutouts || [];
+    init_videoTargetCache(cvt_config, renderAppMode, renderMode){
+      const rarm = `${renderAppMode}_${renderMode}`
+      if(!cvt_config || cvt_config[rarm] === undefined) return;
 
-                  const region = window.region;
-                  const minX = Math.min(...region.map(p => p.x));
-                  const maxX = Math.max(...region.map(p => p.x));
-                  const minY = Math.min(...region.map(p => p.y));
-                  const maxY = Math.max(...region.map(p => p.y));
+      this.$nextTick(() => {
+        const vt_config = cvt_config[rarm]
+        const val = utils.deepCopy(vt_config);
+        for(const page of Object.values(val)){
+          for(const vc of Object.values(page)){
+            vc.processed = vc.processed === undefined ? Boolean(vc.cutouts && vc.cutouts.length > 0) : vc.processed;
+            vc.cutouts = vc.cutouts || [];
+            
+            const instance = renderAppMode
+            const lfs = vc.linkedFrames || [];
+            for(const lf of lfs){
+              if(lf.mode != renderMode)
+                continue;
 
-                  const pcutouts = pc.targetData.cutouts;
-                  pcutouts.push({
-                    poly: utils.polyToPolyString(region, 0, 0),
-                    width: maxX-minX,
-                    height: maxY-minY,
-                    top: minY,
-                    left: minX,
-                    id: window.id
-                  });
+              const ld = {
+                mode: renderMode,
+                instance: instance,
+                page: vc.page,
+                vcid: vc.id,
+              };
+              if(lf.instance == ld.instance){
+                const linkFromName = `${ld.instance}-${ld.vcid}-all`;
+                const linkToName   = `${lf.instance}-${lf.vcid}-all`;
+                if(!this.$parent.linkData.linkedCanvases.exists(linkFromName))  this.$parent.linkData.linkedCanvases.add(linkFromName, ld);
+                if(!this.$parent.linkData.linkedCanvases.exists(linkToName  ))  this.$parent.linkData.linkedCanvases.add(linkToName  , lf);
+                this.$parent.linkData.linkedCanvases.merge(linkFromName, linkToName);
+              } else {
+                for(const frame of lf.frames){
+                  ld.frame = frame[0];
+                  lf.frame = frame[1];
+                  const linkFromName = `${ld.instance}-${ld.vcid}-${ld.frame}`;
+                  const linkToName   = `${lf.instance}-${lf.vcid}-${lf.frame}`;
+                  if(!this.$parent.linkData.linkedCanvases.exists(linkFromName))  this.$parent.linkData.linkedCanvases.add(linkFromName, ld);
+                  if(!this.$parent.linkData.linkedCanvases.exists(linkToName  ))  this.$parent.linkData.linkedCanvases.add(linkToName  , lf);
+                  this.$parent.linkData.linkedCanvases.merge(linkFromName, linkToName);
                 }
-              });
+              }
+            }
+
+
+            if(vc.parentCanvas && vc.parentCanvas != '-1'){
+              const pc = this.$refs[`loomVideoCanvas-${vc.parentCanvas}`];
+              if(vc.makeCutout && pc){
+                pc.targetData.cutouts = vc.parentCanvas.cutouts || [];
+
+                const region = vc.region;
+                const minX = Math.min(...region.map(p => p.x));
+                const maxX = Math.max(...region.map(p => p.x));
+                const minY = Math.min(...region.map(p => p.y));
+                const maxY = Math.max(...region.map(p => p.y));
+
+                const pcutouts = pc.targetData.cutouts;
+                pcutouts.push({
+                  poly: utils.polyToPolyString(region, 0, 0),
+                  width: maxX-minX,
+                  height: maxY-minY,
+                  top: minY,
+                  left: minX,
+                  id: vc.id
+                });
+              }
             }
           }
         }
-      }
 
-      for(let key in vt_config){
-        this.videoTargetCache[key] = vt_config[key];
-      }
+        for(let key in vt_config){
+          this.videoTargetCache[key] = vt_config[key];
+        }
+      });
     },
 
     updateInteractionHistory(target, e, videoCanvas){
@@ -255,6 +303,26 @@ export default {
         this.interactionHistory.shift();
       }
       this.emitter.emit("runInteractionAnalysis", this.interactionHistory);
+    },
+
+    addInstanceLink(fl, ld){
+      const fli = this.$parent.$refs[fl.instance].renderAppMode;
+      if(this.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames == undefined)
+        this.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames = [];
+      const linkedFrames = this.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames;
+
+      const lf = linkedFrames.find(lf => lf.mode == cld.mode && lf.page == cld.page && lf.vcid == cld.vcid);
+      if(lf != undefined){
+        lf.frames = lf.frames || [];
+        lf.frames.push([fl.frame, ld.frame])
+      } else {
+        const cld = {...ld} //shallow copy
+        if(fl.instance != ld.instance){
+          delete cld.frame;
+          cld.frames = [[fl.frame, ld.frame]];
+        }
+        linkedFrames.push(cld)
+      }
     },
     
     changeState(target_id, offset = 0){
@@ -312,7 +380,7 @@ export default {
         processed: true,
         ...obj //to overwrite preceding values
       };
-      return this.videoTargetCache[mode][id];
+      return this.videoTargetCache[mode][page][id];
     },
 
 

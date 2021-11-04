@@ -110,25 +110,16 @@
         type="checkbox"
         class="sidebar-toggle apple-switch btn btn-default"
       />
-      <canvas 
-        ref="miniMap" 
-        id="miniMap"
-      />
-      <input 
-        @input="inputSearch"
-        type="text" 
-        class="form-control input-search" 
-        placeholder="Search"
-      />
     </div>
 
-    <div>
+    <div style="position: relative">
       <loom-instance
-        v-for="(directory, key) in directories"
+        v-for="(app, key) in appModes"
         :key="String(key)"
-        :id="String(key)"
-        :ref="String(key)"
-        :directory=directory
+        :id="app.value"
+        :ref="app.value"
+        :name="app.value"
+        :directory="app.directory"
         :videoTargetCache="appConfig"
         :regionSelect="regionSelect"
         :overlay="hintHelpState"
@@ -146,10 +137,12 @@ import loomInstance from './loomInstance.vue'
 import DSet from './utils/disjointset.js'
 
 // TODOs: 
-// (?)maybe(?) make "children" flat array, not weird empty object keyed on id
+// 0. fix waiting for non-loaded instance to load before trying to load config
+// 1. fix wrong frame re-rendering when copying one window's page to another (add pages to dset id?)
+// 2. fix copying one window's page to another also copying its cutout
 
+// make "children" flat array, not weird empty object keyed on id
 // z-index adjuster
-// add frame mappings/instance mappings to vtcs
 
 // auto-generate app based on user interaction
 // create api for auto generating apps
@@ -186,7 +179,6 @@ export default {
         firstLink: null,
         linkedCanvases: new DSet(),
       },
-      searchResults: [],
       appConfig: {},
       //settings
       loomMenuWidth: 120,
@@ -235,8 +227,8 @@ export default {
       const apps = this.appModes.map(am => ({selected: this.appMode.includes(am.value), ...am})).slice(0,this.directories.length);
       apps.forEach((app,i) => {
         const renderApp = {...app, renderMode: this.renderMode};
-        if(this.$refs[i])
-          this.$refs[i].init(renderApp);
+        if(this.$refs[app.value])
+          this.$refs[app.value].init(renderApp);
       });
     },
 
@@ -286,7 +278,6 @@ export default {
       }
       saveNames.push(name);
       
-
       this.appConfig['startState'] = {
         appMode: this.appMode,
         current_state: this.current_state,
@@ -320,7 +311,6 @@ export default {
   
       this.current_state = this.appConfig['startState']['current_state'];
       this.appMode = this.appConfig['startState']['appMode'];
-
       delete this.appConfig['startState'];
 
       this.init();
@@ -335,30 +325,35 @@ export default {
     linkVideoCanvas(){
       if(this.linkData.linkMode != 'linking' && this.linkData.linkMode != 'linkingTo')  return;
 
-      const instance = this.currVideoCanvasSelected.instanceID;
-      const vcid = this.currVideoCanvasSelected.id;
-      const frame = this.currVideoCanvasSelected.lastFrame;
-
-      let addLVC = (name) => {
-        if(!this.linkData.linkedCanvases.exists(name)){
-          const data = {instance, vcid, frame};
-          this.linkData.linkedCanvases.add(name, data);
-        }
+      const ld = {
+        mode: this.currVideoCanvasSelected.renderMode,
+        instance: this.currVideoCanvasSelected.instanceID,
+        page: this.currVideoCanvasSelected.page,
+        vcid: this.currVideoCanvasSelected.id,
+        frame: this.currVideoCanvasSelected.lastFrame
       }
 
       if(this.linkData.linkMode == 'linking'){
-        const name = `${instance}-${vcid}`;
-        this.linkData.firstLink = name;
-        addLVC(name);
+        this.linkData.firstLink = ld;
         return;
       }
 
-      if(this.linkData.linkMode == 'linkingTo'){
-        const name = `${instance}-${vcid}`;
-        addLVC(name);
-        if(this.linkData.linkedCanvases.exists(this.linkData.firstLink)){
-          this.linkData.linkedCanvases.merge(this.linkData.firstLink, name);
+      if(this.linkData.linkMode == 'linkingTo'){ 
+        const fl = this.linkData.firstLink;
+        let linkFromName, linkToName;
+
+        if(fl.instance === ld.instance){//instance linking - all frames linked
+          linkToName = `${fl.instance}-${fl.vcid}-all`
+          linkFromName = `${ld.instance}-${ld.vcid}-all`
+        } else { //frame linking - only one frame linked - cross-instance
+          linkToName = `${fl.instance}-${fl.vcid}-${fl.frame}`;
+          linkFromName = `${ld.instance}-${ld.vcid}-${ld.frame}`
         }
+
+        if(!this.linkData.linkedCanvases.exists(linkToName))    this.linkData.linkedCanvases.add(linkToName, fl);
+        if(!this.linkData.linkedCanvases.exists(linkFromName))  this.linkData.linkedCanvases.add(linkFromName, ld);
+        this.linkData.linkedCanvases.merge(linkToName, linkFromName);  
+        this.$refs[this.currVideoCanvasSelected.instanceID].addInstanceLink(fl, ld);
         this.linkData.firstLink = null;
         return;
       }
@@ -366,18 +361,17 @@ export default {
     },
 
     changeVideoFrame(instance, vcid, frame, emit){
-      if(this.linkData.linkedCanvases.exists(`${instance}-${vcid}`)){
-        this.linkData.linkedCanvases.of(`${instance}-${vcid}`).forEach(d => {
-          if(this.$refs[d.instance]){
-            if(d.instance != instance){
-              //todo: will need frame mappings for cross-instance frames
-              return;
-            }
-
-            this.$refs[d.instance].changeVideoFrame(d.vcid, /* d.frame */ frame, emit);
+      if(this.linkData.linkedCanvases.exists(`${instance}-${vcid}-${frame}`)){ //per-frame links
+        this.linkData.linkedCanvases.of(`${instance}-${vcid}-${frame}`).forEach(d => {
+          this.$refs[d.instance].changeVideoFrame(d.vcid, d.frame, emit);
+        });
+      } else if(this.linkData.linkedCanvases.exists(`${instance}-${vcid}-all`)){ //instance links (all frames linked) 
+        this.linkData.linkedCanvases.of(`${instance}-${vcid}-all`).forEach(d => {
+          if(this.$refs[d.instance] && d.instance === instance){
+            this.$refs[d.instance].changeVideoFrame(d.vcid, frame, emit);
           }
         });
-      } else {
+      } else { //no link, just update current instance's vcid's frame
         if(this.$refs[instance]){
           this.$refs[instance].changeVideoFrame(vcid, frame, emit);
         }
@@ -390,8 +384,8 @@ export default {
     },
 
     Delete(){
-      if(this.$refs[this.currVideoCanvasSelected.loomID]){
-        this.$refs[this.currVideoCanvasSelected.loomID].Delete(this.currVideoCanvasSelected);
+      if(this.$refs[this.currVideoCanvasSelected.instanceID]){
+        this.$refs[this.currVideoCanvasSelected.instanceID].Delete(this.currVideoCanvasSelected);
       }
     },
     copy(){
@@ -409,8 +403,8 @@ export default {
       this.pasteBin = pasteBin;
     },
     paste(){
-      if(this.$refs[this.pasteBin.loomID])
-        this.$refs[this.pasteBin.loomID].paste(this.pasteBin.targetData);
+      if(this.$refs[this.pasteBin.instanceID])
+        this.$refs[this.pasteBin.instanceID].paste(this.pasteBin.targetData);
     },
   },
 
@@ -432,21 +426,22 @@ export default {
       let appName = d.split('/');
       appName = appName[appName.length-1];
       this.appModes.push({
+        directory: d,
         label: appName.charAt(0).toUpperCase() + appName.slice(1),
         value: appName,
       });
     });
     this.appMode = this.appModes[0].value;
+    this.$refs.appMode.select(this.appMode);
     
     ['Desktop', 'Mobile'].forEach(d => this.renderModes.push({
       value: d.toLowerCase(), 
       label: d,
     }));
     this.renderMode = this.renderModes[0].value;
-    
-    //these cause re-renderings because of stupid @change event, unecessary
-    this.$refs.appMode.select(this.appMode);
     this.$refs.renderMode.select(this.renderMode); 
+    
+    this.$nextTick(this.init);
   }
 
 }
@@ -489,18 +484,6 @@ export default {
 
   table td {
     cursor: pointer;
-  }
-
-  .search-results-table {
-    width: 100px;
-    margin: 10px auto;
-  }
-
-  .input-search {
-    width: 100px;  
-    margin: 0 auto;
-    margin-top: 10px;
-    height: 20px;
   }
 
   .sidebar-toggle {

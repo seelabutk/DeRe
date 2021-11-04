@@ -1,5 +1,5 @@
 <template>
-  <div ref="container" style="height: 0px; width: 0px;">
+  <div ref="container" style="height: 0px; width: 0px; pointer-events: auto;">
 
     <!-- positioning of canvas, cutouts, components !-->
     <div
@@ -9,7 +9,7 @@
         height: height + 'px',
         top: targetData.top + 'px',
         left: targetData.left + 'px',
-        clipPath: `url(#clipping-${targetData.id})`,
+        clipPath: `url(#clipping-${instanceID}-${targetData.id})`,
       }"
     >
       <!-- canvas element to redraw video !-->
@@ -50,8 +50,7 @@
           :current_state="current_state"
           @change-state="changeState"
           @add-history="addHistory"
-          @onmouseleave="DeleteHoverCanvas"
-        />
+        /> <!-- @onmouseleave="DeleteHoverCanvas" -->
       </div>
       <!-- cutouts to mask interaction regions !-->
       <svg 
@@ -75,7 +74,7 @@
 
     <!-- videoCanvas polygon mask !-->
     <svg height="0" pointer-events="none">
-      <clipPath :id="`clipping-${targetData.id}`">
+      <clipPath :id="`clipping-${instanceID}-${targetData.id}`">
         <polygon  pointer-events="fill" :points="currentPolygonMask ? currentPolygonMaskString : null"/>
       </clipPath>
     </svg>
@@ -94,7 +93,6 @@ import utils from './utils/utils.js'
 import loomConfig from './loomConfig.json'
 import loomBrushingBox from './loomComponents/loomBrushingBox.vue'
 import loomButton from './loomComponents/loomButton.vue'
-import loomTarget from './loomComponents/loomTarget.vue'
 import loomHover from './loomComponents/loomHover.vue'
 import loomDropdown from './loomComponents/loomDropdown.vue'
 
@@ -102,9 +100,8 @@ export default {
   name: 'loomVideoCanvas',
   emits: ['frame_processed'],
 
-  props: ['regionSelect', 'overlay', 'renderMode', 'dragMode', 'info', 'start_state_id', 'targets', 'targetData', 'instanceID'],
+  props: ['regionSelect', 'overlay', 'renderMode', 'renderAppMode', 'dragMode', 'info', 'start_state_id', 'targets', 'targetData', 'instanceID'],
   components: {
-    loomTarget,
     loomButton,
     loomHover,
     loomDropdown,
@@ -125,7 +122,7 @@ export default {
       ctx: null,
       current_state: null,
       
-      hoverMapping: {},
+      // hoverMapping: {},
       polygonMasks: {},
       polygonResizeIdx: -1,
 
@@ -193,8 +190,8 @@ export default {
     getComponent: function(target){
       if(target.id == '-1') return undefined;
       const loomObjectName = `loom${target.actor.charAt(0).toUpperCase() + target.actor.slice(1)}`;
-      if(loomConfig[this.renderMode] && loomConfig[this.renderMode].mappings){
-        const componentName = loomConfig[this.renderMode].mappings[loomObjectName];
+      if(loomConfig[this.renderAppMode] && loomConfig[this.renderAppMode].mappings){
+        const componentName = loomConfig[this.renderAppMode].mappings[loomObjectName];
         if(componentName && this.$options.components[componentName])
           return this.$options.components[componentName];
       }
@@ -202,7 +199,7 @@ export default {
       if(this.$options.components[loomObjectName])
         return this.$options.components[loomObjectName];
 
-      return undefined;//loomTarget
+      return undefined;
     },
 
     changeState(target_id, offset = 0, changeParent=true, emit=true){
@@ -210,24 +207,23 @@ export default {
     }, 
 
     changeStateWithFrameNo(frame, offset=0, changeParent=true, emit=true){
-
+      
       if(changeParent && this.updateParentCurrentState) this.$parent.changeStateWithFrameNo(frame, offset);
       this.current_state = Object.values(this.targets).find(o => o.frame_no == frame);
-      let img = null;
-
+      
+      /* let img = null;
       if(this.current_state && this.current_state.actor == "hover" && !this.hoverMapping[this.current_state.id]){
         img = cv.imread(this.$refs.canvas);
         this.hoverMapping[this.current_state.id] = {};
-      }
+      } */
       
       const actualFrame = frame + 1 + offset;
       if(this.lastFrame == actualFrame) return;
 
-      //this.$parent.changeVideoFrame(this.id, actualFrame, emit)
       this.emitter.emit('changeVideoFrame', [this.instanceID, this.id, actualFrame, emit]);
       this.lastFrame = actualFrame;
 
-      if(img !== null && !this.targetData.processed){
+      /* if(img !== null && !this.targetData.processed){
         (new Promise(r => { // wait for frame change
           this.emitter.on('post_redraw' + this.targetData.id, r);
         })).then(() => {
@@ -235,8 +231,7 @@ export default {
           let rect = null;
 
           if(!this.hoverMapping[this.current_state.id].rect){
-            const newImg = cv.imread(this.$refs.canvas);
-            rect = this.compareImages(img, newImg);
+            rect = this.compareImages(img, cv.imread(this.$refs.canvas));
             if(rect)  this.hoverMapping[this.current_state.id].rect = rect;
           } else {
             rect = this.hoverMapping[this.current_state.id].rect;
@@ -247,7 +242,7 @@ export default {
             this.cutRegions(rect, false, false, true);
           }
         });
-      }
+      } */
     },
 
     viewImageData(img, width, height){
@@ -271,7 +266,8 @@ export default {
       cv.imshow(canvas, img)
     },
 
-    compareImages(img1, img2){
+    /* compareImages(img1, img2){
+      console.log(img1, img2);
       const src = cv.matFromArray(img1.rows, img1.cols, cv.CV_8UC3, utils.absdiff(img1, img2));
       cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
       cv.threshold(src, src, 50, 255, cv.THRESH_BINARY);
@@ -289,7 +285,7 @@ export default {
         .sort((a, b) => dist(a, this.mouseLoc) - dist(b, this.mouseLoc));                 //sort by distance to mouse
 
       return rects[0] || null;
-    },
+    }, */
 
     addHistory(t, e){ this.$parent.updateInteractionHistory(t, e, this.targetData.id); },
 
@@ -306,18 +302,16 @@ export default {
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
     },
 
-    copyRegions(regions, copyUI = true, hoverCutout = false){ //not currently used
-      this.cutRegions(regions, false, copyUI, hoverCutout);
+    copyRegions(regions, copyUI = true, /*hoverCutout = false*/){ //not currently used
+      this.cutRegions(regions, false, copyUI /*,hoverCutout*/);
     },
 
-    cutRegions(regions, cutout = true, copyUI = true, hoverCutout = false){ 
-
-      
-      if(!this.targetData.parentCanvas){ // auto-new page - create new loomVideoCanvas component
+    cutRegions(regions, cutout = true, copyUI = true, /*hoverCutout = false*/){ 
+      if(regions.length > 0 && !this.targetData.parentCanvas){ // auto-new page - create new loomVideoCanvas component
         this.$parent.newVideoTarget({
           parentCanvas: this.targetData.id, 
           startupFn: c => {
-            c.cutRegions(regions, cutout, copyUI, hoverCutout);
+            c.cutRegions(regions, cutout, copyUI /*,hoverCutout*/);
             c.emitter.emit('deselect');
             delete c.targetData.startupFn;
           },
@@ -331,10 +325,10 @@ export default {
 
         const id = String(Object.keys(this.$parent.videoTargets).length);
 
-        if(hoverCutout) {
+        /* if(hoverCutout) {
           if(!this.hoverMapping[this.current_state.id]) this.hoverMapping[this.current_state.id] = {};
           this.hoverMapping[this.current_state.id].id = id;
-        }
+        } */
 
         this.$parent.videoTargets[id] = {
           page: this.targetData.page,
@@ -348,7 +342,7 @@ export default {
           startupFn: c => {
             c.current_state = this.current_state;
             c.emitter.emit('deselect');
-            if(hoverCutout) c.$refs.container.style.pointerEvents = 'none';
+            // if(hoverCutout) c.$refs.container.style.pointerEvents = 'none';
             delete c.targetData.startupFn;
           },
           processed: true,
@@ -454,7 +448,7 @@ export default {
     onScreenMouseDown(e){
       let mouseLoc = this.clientToOffset(e);
       const resizePoly = this.isPolygonVertexHovered(mouseLoc);
-      if(resizePoly >= 0){
+      if(resizePoly >= 0 && !this.dragMode){
         this.resizePolygonMode = true;
         this.polygonResizeIdx = resizePoly;
       }
@@ -579,16 +573,16 @@ export default {
       .filter(rect => Math.abs(this.width - rect.width) > 100 && Math.abs(this.height - rect.height) > 100)  // filter out rects that try and crop too much of the screen out
       .map(utils.rectToPoly);
 
-      this.cutRegions(rects, true, true, false);
+      if(rects.length != 0) this.cutRegions(rects, true, true, false);
   
       src.delete(); contours.delete(); hierarchy.delete();
       this.$emit('frame_processed');
     },
 
-    DeleteHoverCanvas(){
+    /* DeleteHoverCanvas(){
       const vt = Object.values(this.$parent.videoTargets).find(vt => vt.id == this.hoverMapping[this.current_state.id]);
       if(vt) delete this.$parent.videoTargets[vt.id];
-    },
+    }, */
 
     clearSelection(){
       this.dragging = false;
@@ -601,6 +595,7 @@ export default {
 
   mounted(){
     if(this.targetData.start_state)  this.current_state = this.targetData.start_state;
+    const start_state_id = this.targetData.start_state ? this.targetData.start_state.id : this.start_state_id;
 
     this.ctx = this.$refs.canvas.getContext('2d');
     this.ctx.save();
@@ -611,8 +606,9 @@ export default {
     this.$refs.canvas.width = this.width;
     this.$refs.canvas.height = this.height;
     
-    this.id = this.targetData.id
-    this.current_state = Object.values(this.targets).find(t => t.id == this.start_state_id) || Object.values(this.targets)[1];
+    this.id = this.targetData.id;
+    this.page = this.targetData.page;
+    this.current_state = Object.values(this.targets).find(t => t.id == start_state_id) || Object.values(this.targets)[1];
 
     //nextTick ensures the videoTarget reference will be created by the time this code runs
     this.$nextTick(()=>{
@@ -646,7 +642,6 @@ export default {
             left: minX,
             id: this.targetData.id,
           });
-
           this.redraw();
         }
       } else {

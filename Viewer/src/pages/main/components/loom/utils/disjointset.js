@@ -13,6 +13,7 @@ function DSet() {
 DSet.prototype = {
   add(id = undefined, data = undefined) {
     if (id == undefined) id = this.sets.length;
+    if(this.sets.hasOwnProperty(id))  return null;
     this.sets[id] = new Node(data);
     this.sets[id].children.push(id);
     ++this.nsets;
