@@ -286,7 +286,7 @@ export default {
         }
 
         for(let key in vt_config){
-          this.videoTargetCache[key] = vt_config[key];
+          this.videoTargetCache[rarm][key] = vt_config[key];
         }
       });
     },
