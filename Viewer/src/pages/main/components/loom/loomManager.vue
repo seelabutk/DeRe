@@ -137,7 +137,6 @@ import loomInstance from './loomInstance.vue'
 import DSet from './utils/disjointset.js'
 
 // TODOs: 
-// 0. fix waiting for non-loaded instance to load before trying to load config
 // 1. fix wrong frame re-rendering when copying one window's page to another (add pages to dset id?)
 // 2. fix copying one window's page to another also copying its cutout
 
@@ -227,8 +226,9 @@ export default {
       const apps = this.appModes.map(am => ({selected: this.appMode.includes(am.value), ...am})).slice(0,this.directories.length);
       apps.forEach((app,i) => {
         const renderApp = {...app, renderMode: this.renderMode};
-        if(this.$refs[app.value])
+        if(this.$refs[app.value]){
           this.$refs[app.value].init(renderApp);
+        }
       });
     },
 
@@ -307,12 +307,13 @@ export default {
         alert("File does not exist");
         return;
       }
+
       this.appConfig = JSON.parse(localStorage.getItem(loadName));
   
       this.current_state = this.appConfig['startState']['current_state'];
       this.appMode = this.appConfig['startState']['appMode'];
       delete this.appConfig['startState'];
-
+      
       this.init();
     },
 
@@ -431,7 +432,7 @@ export default {
         value: appName,
       });
     });
-    this.appMode = this.appModes[0].value;
+    this.appMode = this.appModes[0];
     this.$refs.appMode.select(this.appMode);
     
     ['Desktop', 'Mobile'].forEach(d => this.renderModes.push({

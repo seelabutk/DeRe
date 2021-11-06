@@ -127,7 +127,7 @@ export default {
     targets: function(){
       const originalTargets = utils.shallowCopy(this.transformedTargetCache['original']);
       delete originalTargets.mode;
-      const newTargets = utils.shallowCopy(this.transformedTargetCache[this.renderAppMode]);
+      const newTargets = utils.shallowCopy(this.transformedTargetCache[this.renderAppMode] || {});
       delete newTargets.mode;
       const mergedTargets = utils.deepMerge(originalTargets, newTargets);
       return mergedTargets;
@@ -209,9 +209,10 @@ export default {
           this.renderAppMode = 'hidden';
         }
         this.targetCacheModeChange(this.renderAppMode, m.renderMode);
-        this.current_state = Object.values(this.targets).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[0];
         this.init_videoTargetCache(vtc, m.value, m.renderMode);
         this.videoCacheModeChange(this.renderAppMode);
+
+        this.current_state = Object.values(this.targets).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[0];
         this.changeState(this.current_state.id);
       });
     },
@@ -220,7 +221,7 @@ export default {
       const rarm = `${renderAppMode}_${renderMode}`
       if(!cvt_config || cvt_config[rarm] === undefined) return;
 
-      this.$nextTick(() => {
+      //this.$nextTick(() => {
         const vt_config = cvt_config[rarm]
         const val = utils.deepCopy(vt_config);
         for(const page of Object.values(val)){
@@ -288,7 +289,7 @@ export default {
         for(let key in vt_config){
           this.videoTargetCache[rarm][key] = vt_config[key];
         }
-      });
+      //});
     },
 
     updateInteractionHistory(target, e, videoCanvas){
