@@ -385,7 +385,7 @@ export default {
     },
 
 
-    changeVideoFrame(videoCanvasID, frameNo, emit=true){
+    changeVideoFrame(page, videoCanvasID, frameNo, emit=true){
       if(!frameNo && frameNo !== 0) return
       const vp = this.videoPlayers[this.lastUsedVideoPlayer];
       this.lastUsedVideoPlayer = (this.lastUsedVideoPlayer+1)%this.numVideoPlayers;
@@ -436,7 +436,6 @@ export default {
         else
           console.error("No Player!");
       });
-      
     },
 
     videoCacheModeChange(mode){

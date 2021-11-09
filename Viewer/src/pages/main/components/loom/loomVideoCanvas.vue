@@ -220,7 +220,7 @@ export default {
       const actualFrame = frame + 1 + offset;
       if(this.lastFrame == actualFrame) return;
 
-      this.emitter.emit('changeVideoFrame', [this.instanceID, this.id, actualFrame, emit]);
+      this.emitter.emit('changeVideoFrame', [this.instanceID, this.page, this.id, actualFrame, emit]);
       this.lastFrame = actualFrame;
 
       /* if(img !== null && !this.targetData.processed){
@@ -507,7 +507,7 @@ export default {
     },
 
     redraw(emit=false){
-      this.emitter.emit('changeVideoFrame', [this.instanceID, this.id, this.lastFrame, emit]);
+      this.emitter.emit('changeVideoFrame', [this.instanceID, this.page, this.id, this.lastFrame, emit]);
     },
 
     draw(videoPlayer, emit = true){

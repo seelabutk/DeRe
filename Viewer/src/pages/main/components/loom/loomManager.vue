@@ -137,7 +137,7 @@ import loomInstance from './loomInstance.vue'
 import DSet from './utils/disjointset.js'
 
 // TODOs: 
-// 1. fix wrong frame re-rendering when copying one window's page to another (add pages to dset id?)
+// 1. test wrong frame re-rendering when copying one window's page to another (add pages to dset id?)
 // 2. fix copying one window's page to another also copying its cutout
 
 // make "children" flat array, not weird empty object keyed on id
@@ -344,11 +344,11 @@ export default {
         let linkFromName, linkToName;
 
         if(fl.instance === ld.instance){//instance linking - all frames linked
-          linkToName = `${fl.instance}-${fl.vcid}-all`
-          linkFromName = `${ld.instance}-${ld.vcid}-all`
+          linkToName = `${fl.instance}-${fl.page}-${fl.vcid}-all`;
+          linkFromName = `${ld.instance}-${ld.page}-${ld.vcid}-all`;
         } else { //frame linking - only one frame linked - cross-instance
-          linkToName = `${fl.instance}-${fl.vcid}-${fl.frame}`;
-          linkFromName = `${ld.instance}-${ld.vcid}-${ld.frame}`
+          linkToName = `${fl.instance}-${fl.page}-${fl.vcid}-${fl.frame}`;
+          linkFromName = `${ld.instance}-${ld.page}-${ld.vcid}-${ld.frame}`;
         }
 
         if(!this.linkData.linkedCanvases.exists(linkToName))    this.linkData.linkedCanvases.add(linkToName, fl);
@@ -358,23 +358,22 @@ export default {
         this.linkData.firstLink = null;
         return;
       }
-      
     },
 
-    changeVideoFrame(instance, vcid, frame, emit){
-      if(this.linkData.linkedCanvases.exists(`${instance}-${vcid}-${frame}`)){ //per-frame links
-        this.linkData.linkedCanvases.of(`${instance}-${vcid}-${frame}`).forEach(d => {
-          this.$refs[d.instance].changeVideoFrame(d.vcid, d.frame, emit);
+    changeVideoFrame(instance, page, vcid, frame, emit){
+      if(this.linkData.linkedCanvases.exists(`${instance}-${page}-${vcid}-${frame}`)){ //per-frame links
+        this.linkData.linkedCanvases.of(`${instance}-${page}-${vcid}-${frame}`).forEach(d => {
+          this.$refs[d.instance].changeVideoFrame(d.page, d.vcid, d.frame, emit);
         });
-      } else if(this.linkData.linkedCanvases.exists(`${instance}-${vcid}-all`)){ //instance links (all frames linked) 
-        this.linkData.linkedCanvases.of(`${instance}-${vcid}-all`).forEach(d => {
+      } else if(this.linkData.linkedCanvases.exists(`${instance}-${page}-${vcid}-all`)){ //instance links (all frames linked) 
+        this.linkData.linkedCanvases.of(`${instance}-${page}-${vcid}-all`).forEach(d => {
           if(this.$refs[d.instance] && d.instance === instance){
-            this.$refs[d.instance].changeVideoFrame(d.vcid, frame, emit);
+            this.$refs[d.instance].changeVideoFrame(d.page, d.vcid, frame, emit);
           }
         });
       } else { //no link, just update current instance's vcid's frame
         if(this.$refs[instance]){
-          this.$refs[instance].changeVideoFrame(vcid, frame, emit);
+          this.$refs[instance].changeVideoFrame(page, vcid, frame, emit);
         }
       }
     },
