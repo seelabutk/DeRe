@@ -47,7 +47,6 @@
           :targets="targets"
           :showHint="overlay"
           :interactable="!regionSelect"
-          :current_state="current_state"
           @change-state="changeState"
           @add-history="addHistory"
         /> <!-- @onmouseleave="DeleteHoverCanvas" -->
@@ -85,7 +84,6 @@
 <script>
 
 // TODO: get rid of $parent stuff, pass through events via loomVideoCanvas in loom.vue
-// TODO: attempt to put all hoverCanvas logic into loomHover.vue?
 // TODO: resizing, editing black cutout regions (moving, polygon, etc)
 
 import utils from './utils/utils.js'
@@ -100,7 +98,7 @@ export default {
   name: 'loomVideoCanvas',
   emits: ['frame_processed'],
 
-  props: ['regionSelect', 'overlay', 'renderMode', 'renderAppMode', 'dragMode', 'info', 'start_state_id', 'targets', 'targetData', 'instanceID'],
+  props: ['regionSelect', 'overlay', 'renderMode', 'renderAppMode', 'dragMode', 'info', 'targets', 'targetData', 'instanceID', 'start_state_id'],
   components: {
     loomButton,
     loomHover,
@@ -120,7 +118,6 @@ export default {
       width: 0,
       height: 0,
       ctx: null,
-      current_state: null,
       
       // hoverMapping: {},
       polygonMasks: {},
@@ -132,19 +129,20 @@ export default {
     };
   },
 
-  computed: {
+  computed: {    
+    current_state(){ return Object.values(this.targets).find(t => t.id == this.targetData.current_state_id) || Object.values(this.targets)[1]; },
     currentTargets(){ return utils.currentTargets(this.current_state, this.targets); },
+    id(){ return this.targetData.id; },
+    page(){ return this.targetData.page; },
+    parentCanvas(){ return this.$parent.$refs[`loomVideoCanvas-${this.targetData.parentCanvas}`] || false; },
+    currentPolygonPath2D(){ return utils.polyToPath2D(this.currentPolygonMask,0,0); },
+    currentPolygonMaskString(){ return utils.polyToPolyString(this.currentPolygonMask,0,0); },
     currentPolygonMask(){ 
       for(let cs = this.current_state; cs && cs.parent_id != cs.id; cs = this.targets[cs.parent_id]){
         if(this.polygonMasks[cs.id]) return this.polygonMasks[cs.id];
       }
       return Object.values(this.polygonMasks)[0];
     },
-    currentPolygonPath2D(){ return utils.polyToPath2D(this.currentPolygonMask,0,0); },
-    currentPolygonMaskString(){ return utils.polyToPolyString(this.currentPolygonMask,0,0); },
-
-    parentCanvas(){ return this.$parent.$refs[`loomVideoCanvas-${this.targetData.parentCanvas}`] || false; },
-
     dragSelectStyle: function(){
       const top = Math.min(this.dragStart.y, this.dragCurr.y) + 'px';
       const left = Math.min(this.dragStart.x, this.dragCurr.x) + 'px';
@@ -207,42 +205,17 @@ export default {
     }, 
 
     changeStateWithFrameNo(frame, offset=0, changeParent=true, emit=true){
-      
-      if(changeParent && this.updateParentCurrentState) this.$parent.changeStateWithFrameNo(frame, offset);
-      this.current_state = Object.values(this.targets).find(o => o.frame_no == frame);
-      
-      /* let img = null;
-      if(this.current_state && this.current_state.actor == "hover" && !this.hoverMapping[this.current_state.id]){
-        img = cv.imread(this.$refs.canvas);
-        this.hoverMapping[this.current_state.id] = {};
-      } */
-      
       const actualFrame = frame + 1 + offset;
       if(this.lastFrame == actualFrame) return;
-
-      this.emitter.emit('changeVideoFrame', [this.instanceID, this.page, this.id, actualFrame, emit]);
       this.lastFrame = actualFrame;
+      
+      if(changeParent && this.updateParentCurrentState) this.$parent.changeStateWithFrameNo(frame, offset);
 
-      /* if(img !== null && !this.targetData.processed){
-        (new Promise(r => { // wait for frame change
-          this.emitter.on('post_redraw' + this.targetData.id, r);
-        })).then(() => {
-          if(!this.$refs.canvas)  return;
-          let rect = null;
+      /* const newpage = this.$parent.computeCurrentVideoTargets()[0];
+      if(newpage !== null && newpage != this.page) return; */
 
-          if(!this.hoverMapping[this.current_state.id].rect){
-            rect = this.compareImages(img, cv.imread(this.$refs.canvas));
-            if(rect)  this.hoverMapping[this.current_state.id].rect = rect;
-          } else {
-            rect = this.hoverMapping[this.current_state.id].rect;
-          }
-
-          if(rect){
-            rect = utils.rectToPoly(rect);
-            this.cutRegions(rect, false, false, true);
-          }
-        });
-      } */
+      this.targetData.current_state_id = Object.values(this.targets).find(o => o.frame_no == frame).id;
+      this.redraw(emit);
     },
 
     viewImageData(img, width, height){
@@ -266,27 +239,6 @@ export default {
       cv.imshow(canvas, img)
     },
 
-    /* compareImages(img1, img2){
-      console.log(img1, img2);
-      const src = cv.matFromArray(img1.rows, img1.cols, cv.CV_8UC3, utils.absdiff(img1, img2));
-      cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
-      cv.threshold(src, src, 50, 255, cv.THRESH_BINARY);
-      const contours = new cv.MatVector();
-      const hierarchy = new cv.Mat();
-      cv.findContours(src, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-      let rects = [];
-      for(let i = 0; i < contours.size(); ++i)  rects.push(cv.boundingRect(contours.get(i)));
-      
-      function dist(p1, p2){
-        return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-      }
-      rects = rects.filter(r => r.width * r.height > 500 && dist(r, this.mouseLoc) < 200) //filter out small regions      
-        .sort((a, b) => dist(a, this.mouseLoc) - dist(b, this.mouseLoc));                 //sort by distance to mouse
-
-      return rects[0] || null;
-    }, */
-
     addHistory(t, e){ this.$parent.updateInteractionHistory(t, e, this.targetData.id); },
 
     cutSelectedRegion(){
@@ -302,16 +254,16 @@ export default {
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
     },
 
-    copyRegions(regions, copyUI = true, /*hoverCutout = false*/){ //not currently used
-      this.cutRegions(regions, false, copyUI /*,hoverCutout*/);
+    copyRegions(regions, copyUI = true){ //not currently used
+      this.cutRegions(regions, false, copyUI);
     },
 
-    cutRegions(regions, cutout = true, copyUI = true, /*hoverCutout = false*/){ 
+    cutRegions(regions, cutout = true, copyUI = true){ 
       if(regions.length > 0 && !this.targetData.parentCanvas){ // auto-new page - create new loomVideoCanvas component
         this.$parent.newVideoTarget({
           parentCanvas: this.targetData.id, 
           startupFn: c => {
-            c.cutRegions(regions, cutout, copyUI /*,hoverCutout*/);
+            c.cutRegions(regions, cutout, copyUI);
             c.emitter.emit('deselect');
             delete c.targetData.startupFn;
           },
@@ -323,16 +275,12 @@ export default {
       if(regions.length > 0 && regions[0].constructor !== Array) regions = [regions];
       regions.forEach((region, i) => {
 
-        const id = String(Object.keys(this.$parent.videoTargets).length);
+        const id = String(Object.keys(this.$parent.currentVideoTargets).length);
 
-        /* if(hoverCutout) {
-          if(!this.hoverMapping[this.current_state.id]) this.hoverMapping[this.current_state.id] = {};
-          this.hoverMapping[this.current_state.id].id = id;
-        } */
-
-        this.$parent.videoTargets[id] = {
+        this.$parent.currentVideoTargets[id] = {
           page: this.targetData.page,
           id,
+          current_state_id: this.current_state.id,
           region,
           top: this.targetData.top,
           left: this.targetData.left,
@@ -340,9 +288,7 @@ export default {
           parentCanvas: this.targetData.id,
           cutouts: [],
           startupFn: c => {
-            c.current_state = this.current_state;
             c.emitter.emit('deselect');
-            // if(hoverCutout) c.$refs.container.style.pointerEvents = 'none';
             delete c.targetData.startupFn;
           },
           processed: true,
@@ -579,11 +525,6 @@ export default {
       this.$emit('frame_processed');
     },
 
-    /* DeleteHoverCanvas(){
-      const vt = Object.values(this.$parent.videoTargets).find(vt => vt.id == this.hoverMapping[this.current_state.id]);
-      if(vt) delete this.$parent.videoTargets[vt.id];
-    }, */
-
     clearSelection(){
       this.dragging = false;
       this.dragStart = this.dragCurr = {x: -10000, y: -10000};
@@ -594,9 +535,6 @@ export default {
   },
 
   mounted(){
-    if(this.targetData.start_state)  this.current_state = this.targetData.start_state;
-    const start_state_id = this.targetData.start_state ? this.targetData.start_state.id : this.start_state_id;
-
     this.ctx = this.$refs.canvas.getContext('2d');
     this.ctx.save();
 
@@ -605,61 +543,52 @@ export default {
 
     this.$refs.canvas.width = this.width;
     this.$refs.canvas.height = this.height;
+
+    if(this.page == this.$parent.currentPage)
+      this.targetData.current_state_id = this.start_state_id;
+  
+    this.changeState(this.current_state.id, 0, false);
+    if(this.targetData.region){
+      this.polygonMasks[this.current_state.id] = this.targetData.region;
+    } else {
+      this.polygonMasks[this.current_state.id] = [
+        {x: 0, y: 0},
+        {x: this.width, y: 0},
+        {x: this.width, y: this.height},
+        {x: 0, y: this.height}
+      ];
+    }
+
+    if(this.targetData.makeCutout && this.parentCanvas){
+      const region = this.polygonMasks[this.current_state.id];
+
+      const minX = Math.min(...region.map(p => p.x));
+      const maxX = Math.max(...region.map(p => p.x));
+      const minY = Math.min(...region.map(p => p.y));
+      const maxY = Math.max(...region.map(p => p.y));
+
+      const pcutouts = this.parentCanvas.targetData.cutouts;
+      pcutouts.push({
+        poly: utils.polyToPolyString(this.currentPolygonMask, 0, 0),
+        width: maxX-minX,
+        height: maxY-minY,
+        top: minY,
+        left: minX,
+        id: this.targetData.id,
+      });
+    }
     
-    this.id = this.targetData.id;
-    this.page = this.targetData.page;
-    this.current_state = Object.values(this.targets).find(t => t.id == start_state_id) || Object.values(this.targets)[1];
+    if(this.targetData.startupFn) this.targetData.startupFn(this);
+    
+    this.emitter.on('clearSelection', this.clearSelection);
+    this.emitter.on('deselect', this.deselect);
+    this.emitter.on(`changeState-${this.targetData.id}`, this.changeState);
+    this.emitter.on('mousemove', this.onScreenMouseMove);
+    this.emitter.on('mouseup', this.onScreenMouseUp);
+    this.emitter.on('mousedown', this.onScreenMouseDown);
 
-    //nextTick ensures the videoTarget reference will be created by the time this code runs
-    this.$nextTick(()=>{
-      
-      if(this.current_state){
-        this.changeState(this.current_state.id, 0, false);
-        if(this.targetData.region){
-          this.polygonMasks[this.current_state.id] = this.targetData.region;
-        } else {
-          this.polygonMasks[this.current_state.id] = [
-            {x: 0, y: 0},
-            {x: this.width, y: 0},
-            {x: this.width, y: this.height},
-            {x: 0, y: this.height}
-          ];
-        }
-        if(this.targetData.makeCutout && this.parentCanvas){
-          const region = this.polygonMasks[this.current_state.id];
-
-          const minX = Math.min(...region.map(p => p.x));
-          const maxX = Math.max(...region.map(p => p.x));
-          const minY = Math.min(...region.map(p => p.y));
-          const maxY = Math.max(...region.map(p => p.y));
-
-          const pcutouts = this.parentCanvas.targetData.cutouts;
-          pcutouts.push({
-            poly: utils.polyToPolyString(this.currentPolygonMask, 0, 0),
-            width: maxX-minX,
-            height: maxY-minY,
-            top: minY,
-            left: minX,
-            id: this.targetData.id,
-          });
-          this.redraw();
-        }
-      } else {
-        console.warn("No Current State!");
-      }
-      
-      if(this.targetData.startupFn) this.targetData.startupFn(this);
-      
-      this.emitter.on('clearSelection', this.clearSelection);
-      this.emitter.on('deselect', this.deselect);
-      this.emitter.on(`changeState-${this.targetData.id}`, this.changeState);
-      this.emitter.on('mousemove', this.onScreenMouseMove);
-      this.emitter.on('mouseup', this.onScreenMouseUp);
-      this.emitter.on('mousedown', this.onScreenMouseDown);
-
-      this.selected = true;
-      this.emitter.emit("selectVideoCanvas", this);
-    });
+    this.selected = true;
+    this.emitter.emit("selectVideoCanvas", this);
   },
 
   beforeUnmount(){

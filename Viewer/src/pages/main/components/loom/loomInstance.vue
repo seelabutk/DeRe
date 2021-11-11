@@ -26,19 +26,19 @@
       style="position: absolute; top: 0px; left: 0px; visibility: hidden;"
     />
     <loom-video-canvas
-      v-for="videoTarget in videoTargets"
-      :key="`${renderAppMode}-${videoTarget.id}-${videoTarget.page}`"
+      v-for="videoTarget in currentVideoTargets"
+      :key="`${renderAppMode}-${videoTarget.page}-${videoTarget.id}`"
       :ref="`loomVideoCanvas-${videoTarget.id}`"
       :instanceID="id"
       :targets="targets"
       :targetData="videoTarget"
+      :start_state_id="current_state.id"
       :regionSelect="regionSelect"
       :overlay="overlay"
       :renderMode="renderMode"
       :renderAppMode="renderAppMode"
       :currentConfig="currentConfig"
       :info="config.info"
-      :start_state_id="current_state.id"
       :dragMode="dragMode"
       @frame_processed="() => videoTarget.processed = true"
     />
@@ -132,29 +132,30 @@ export default {
       const mergedTargets = utils.deepMerge(originalTargets, newTargets);
       return mergedTargets;
     },
-    videoTargets: function(){
-      if(!this.current_state || !this.videoTargetCache[this.renderAppMode]) return null;
-      let vt = null
-      
+    computeCurrentVideoTargets(){
+      if(!this.current_state || !this.videoTargetCache[this.renderAppMode]) return [null, null];
+      let vt = null;
+      let page = '-1';
+      //traverse up parents
       for(let cs = this.current_state; vt === null && cs && cs.id != cs.parent_id; cs = this.targets[cs.parent_id]){
         if(typeof cs.frame_no === "string" && cs.frame_no.includes("frameless")) continue;
-
+        //check if any of our videoTargets is an ancestor of our current state
         const vts = Object.entries(this.videoTargetCache[this.renderAppMode]);
         for(let i = 0; i < vts.length; ++i){
           if(String(cs.id) === vts[i][0]){
             vt = vts[i][1];
+            page = vts[i][0];
             break;
           }
         }
-
       }
       if(vt === null){
         vt = this.videoTargetCache[this.renderAppMode]['-1'];   //return root
       }
-      return vt;
+      return [page, vt];
     },
-
-    
+    currentVideoTargets(){ return this.computeCurrentVideoTargets[1]; },
+    currentPage(){ return this.computeCurrentVideoTargets[0]; },
   },
 
   methods: {
@@ -221,75 +222,73 @@ export default {
       const rarm = `${renderAppMode}_${renderMode}`
       if(!cvt_config || cvt_config[rarm] === undefined) return;
 
-      //this.$nextTick(() => {
-        const vt_config = cvt_config[rarm]
-        const val = utils.deepCopy(vt_config);
-        for(const page of Object.values(val)){
-          for(const vc of Object.values(page)){
-            vc.processed = vc.processed === undefined ? Boolean(vc.cutouts && vc.cutouts.length > 0) : vc.processed;
-            vc.cutouts = vc.cutouts || [];
-            
-            const instance = renderAppMode
-            const lfs = vc.linkedFrames || [];
-            for(const lf of lfs){
-              if(lf.mode != renderMode)
-                continue;
+      const vt_config = cvt_config[rarm]
+      const val = utils.deepCopy(vt_config);
+      for(const page of Object.values(val)){
+        for(const vc of Object.values(page)){
+          vc.processed = vc.processed === undefined ? Boolean(vc.cutouts && vc.cutouts.length > 0) : vc.processed;
+          vc.cutouts = vc.cutouts || [];
+          
+          const instance = renderAppMode
+          const lfs = vc.linkedFrames || [];
+          for(const lf of lfs){
+            if(lf.mode != renderMode)
+              continue;
 
-              const ld = {
-                mode: renderMode,
-                instance: instance,
-                page: vc.page,
-                vcid: vc.id,
-              };
-              if(lf.instance == ld.instance){
-                const linkFromName = `${ld.instance}-${ld.vcid}-all`;
-                const linkToName   = `${lf.instance}-${lf.vcid}-all`;
+            const ld = {
+              mode: renderMode,
+              instance: instance,
+              page: vc.page,
+              vcid: vc.id,
+            };
+            if(lf.instance == ld.instance){
+              const linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_all`;
+              const linkToName   = `${lf.instance}_${lf.page}_${lf.vcid}_all`;
+              if(!this.$parent.linkData.linkedCanvases.exists(linkFromName))  this.$parent.linkData.linkedCanvases.add(linkFromName, ld);
+              if(!this.$parent.linkData.linkedCanvases.exists(linkToName  ))  this.$parent.linkData.linkedCanvases.add(linkToName  , lf);
+              this.$parent.linkData.linkedCanvases.merge(linkFromName, linkToName);
+            } else {
+              for(const frame of lf.frames){
+                ld.frame = frame[0];
+                lf.frame = frame[1];
+                const linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_${ld.frame}`;
+                const linkToName   = `${lf.instance}_${lf.page}_${lf.vcid}_${lf.frame}`;
                 if(!this.$parent.linkData.linkedCanvases.exists(linkFromName))  this.$parent.linkData.linkedCanvases.add(linkFromName, ld);
                 if(!this.$parent.linkData.linkedCanvases.exists(linkToName  ))  this.$parent.linkData.linkedCanvases.add(linkToName  , lf);
                 this.$parent.linkData.linkedCanvases.merge(linkFromName, linkToName);
-              } else {
-                for(const frame of lf.frames){
-                  ld.frame = frame[0];
-                  lf.frame = frame[1];
-                  const linkFromName = `${ld.instance}-${ld.vcid}-${ld.frame}`;
-                  const linkToName   = `${lf.instance}-${lf.vcid}-${lf.frame}`;
-                  if(!this.$parent.linkData.linkedCanvases.exists(linkFromName))  this.$parent.linkData.linkedCanvases.add(linkFromName, ld);
-                  if(!this.$parent.linkData.linkedCanvases.exists(linkToName  ))  this.$parent.linkData.linkedCanvases.add(linkToName  , lf);
-                  this.$parent.linkData.linkedCanvases.merge(linkFromName, linkToName);
-                }
-              }
-            }
-
-
-            if(vc.parentCanvas && vc.parentCanvas != '-1'){
-              const pc = this.$refs[`loomVideoCanvas-${vc.parentCanvas}`];
-              if(vc.makeCutout && pc){
-                pc.targetData.cutouts = vc.parentCanvas.cutouts || [];
-
-                const region = vc.region;
-                const minX = Math.min(...region.map(p => p.x));
-                const maxX = Math.max(...region.map(p => p.x));
-                const minY = Math.min(...region.map(p => p.y));
-                const maxY = Math.max(...region.map(p => p.y));
-
-                const pcutouts = pc.targetData.cutouts;
-                pcutouts.push({
-                  poly: utils.polyToPolyString(region, 0, 0),
-                  width: maxX-minX,
-                  height: maxY-minY,
-                  top: minY,
-                  left: minX,
-                  id: vc.id
-                });
               }
             }
           }
-        }
 
-        for(let key in vt_config){
-          this.videoTargetCache[rarm][key] = vt_config[key];
+
+          if(vc.parentCanvas && vc.parentCanvas != '-1'){
+            const pc = this.$refs[`loomVideoCanvas-${vc.parentCanvas}`];
+            if(vc.makeCutout && pc){
+              pc.targetData.cutouts = vc.parentCanvas.cutouts || [];
+
+              const region = vc.region;
+              const minX = Math.min(...region.map(p => p.x));
+              const maxX = Math.max(...region.map(p => p.x));
+              const minY = Math.min(...region.map(p => p.y));
+              const maxY = Math.max(...region.map(p => p.y));
+
+              const pcutouts = pc.targetData.cutouts;
+              pcutouts.push({
+                poly: utils.polyToPolyString(region, 0, 0),
+                width: maxX-minX,
+                height: maxY-minY,
+                top: minY,
+                left: minX,
+                id: vc.id
+              });
+            }
+          }
         }
-      //});
+      }
+
+      for(let key in vt_config){
+        this.videoTargetCache[rarm][key] = vt_config[key];
+      }
     },
 
     updateInteractionHistory(target, e, videoCanvas){
@@ -312,7 +311,7 @@ export default {
         this.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames = [];
       const linkedFrames = this.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames;
 
-      const lf = linkedFrames.find(lf => lf.mode == cld.mode && lf.page == cld.page && lf.vcid == cld.vcid);
+      const lf = linkedFrames.find(lf => lf.mode == ld.mode && lf.page == ld.page && lf.vcid == ld.vcid);
       if(lf != undefined){
         lf.frames = lf.frames || [];
         lf.frames.push([fl.frame, ld.frame])
@@ -352,10 +351,13 @@ export default {
       if(mode === undefined)  mode = this.renderAppMode;
 
       let page = '-1';
+      let csid = 0;
+      
       if(!this.videoTargetCache.hasOwnProperty(mode)){
         this.videoTargetCache[mode] = {};
       }else{
         page = String(this.current_state.id);
+        csid = page;
       }
 
       const region = utils.rectToPoly({
@@ -371,6 +373,7 @@ export default {
       this.videoTargetCache[mode][page][id] = {
         page,
         id,
+        current_state_id: csid,
         region,
         top: 0,
         left: 0,
@@ -449,12 +452,12 @@ export default {
 
     Delete(videoCanvas){
       let id = null;
-      if(videoCanvas === null && this.videoTargets !== null) {
+      if(videoCanvas === null && this.currentVideoTargets !== null) {
         id = '-1';
       }else if(videoCanvas){
         id = videoCanvas.id;
       } 
-      if(id !== null)  delete this.videoTargets[id];
+      if(id !== null)  delete this.currentVideoTargets[id];
     },
 
     paste(pasteBin){
@@ -462,8 +465,8 @@ export default {
         const fn = pasteBin.startupFn;
         const copy = utils.deepCopy(pasteBin);
         copy.startupFn = (c) => { c.updateParentCurrentState = false; if(fn) fn(c);}
-        copy.id = copy.id + '_copy';
-        this.videoTargets[copy.id] = copy
+        copy.id = String(Object.keys(this.currentVideoTargets).length);
+        this.currentVideoTargets[copy.id] = copy
       }
     },
 
