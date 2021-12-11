@@ -97,9 +97,14 @@
         <!-- LINK TARGET - push once for enable linking, again to complete linking !-->
         <div style='grid-area: link' :style="linkVideoCanvasStyle">
           <span class="text">{{linkData.linkMode == 'linking' ? 'linking' : linkData.linkMode == 'linkingTo' ? 'link to' : 'link'}}</span> <br>
-         <font-awesome-icon icon="link" @click="() => { if(linkData.linkMode == 'selectable') linkData.linkMode = 'linking' }"/>
+          <font-awesome-icon icon="link" @click="() => { if(linkData.linkMode == 'selectable') linkData.linkMode = 'linking' }"/>
         </div>
-        <!-- CREATE NEW CUTOUT TARGET FOR CURRENT FRAME !-->
+        
+        <!-- linked frames map region !-->
+        <div style='grid-area: mapRegion'>
+          <span class="text">link map</span> <br>
+          <font-awesome-icon icon='map' style='color: white' @click="addMap"/>
+        </div>
 
       </div>
 
@@ -232,9 +237,24 @@ export default {
       });
     },
 
-    newVideoTarget(obj=null){
-      if(this.$refs[this.currVideoCanvasSelected.id])
-        this.$refs[this.currVideoCanvasSelected.id].newVideoTarget(obj, undefined, true);
+    addMap(){
+      this.newVideoTarget({
+        reshapeable: false,
+        region: utils.rectToPoly({x: 0, y: 0, width: 100, height: 100, }),
+        canvas: false,
+        targets: [{
+          actor: 'USA',
+          id: '0',
+          important: true,
+        }],
+        current_state_id: '0',
+      }, undefined, false);
+    },
+
+    newVideoTarget(obj=null, mode=undefined, clear=true){
+      if(this.$refs[this.currVideoCanvasSelected.instanceID]){
+        this.$refs[this.currVideoCanvasSelected.instanceID].newVideoTarget(obj, mode, clear);
+      }
     },
 
     cutRegion(){
@@ -469,6 +489,7 @@ export default {
       'cut        copy      '
       'dup        paste     '
       'delete     link      '
+      'mapRegion  mapRegion '
   }
 
   .grid-container > div {

@@ -30,7 +30,7 @@
       :key="`${renderAppMode}-${videoTarget.page}-${videoTarget.id}`"
       :ref="`loomVideoCanvas-${videoTarget.id}`"
       :instanceID="id"
-      :targets="targets"
+      :targets="videoTarget.targets || targets"
       :targetData="videoTarget"
       :start_state_id="current_state.id"
       :regionSelect="regionSelect"
@@ -370,6 +370,7 @@ export default {
         this.videoTargetCache[mode][page] = {};
 
       const id = String(Object.keys(this.videoTargetCache[mode][page]).length);
+
       this.videoTargetCache[mode][page][id] = {
         page,
         id,

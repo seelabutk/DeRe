@@ -7,27 +7,30 @@
         position: 'absolute',
         width: width + 'px',
         height: height + 'px',
-        top: targetData.top + 'px',
-        left: targetData.left + 'px',
-        clipPath: `url(#clipping-${instanceID}-${targetData.id})`,
+        top: top + 'px',
+        left: left + 'px',
+        clipPath: `url(#clipping-${instanceID}-${id})`,
       }"
+      @click=" dragging=false; emitter.emit('clickVideoCanvas'); "
+      @mousedown="onVideoMouseDown"
+      @mouseleave="dragging=false"
     >
       <!-- canvas element to redraw video !-->
-      <canvas
-        ref="canvas"
-        style="width: 100%; height: 100%;"
-        @click=" dragging=false; emitter.emit('clickVideoCanvas'); "
-        @mousedown="onVideoMouseDown"
-        @mouseleave="dragging=false"
-      />
-      <!-- drag selection !-->
-      <div :style="dragSelectStyle"/>
-      <!-- hints overlay !-->
-      <div 
-        class='overlay'
-        :style='{display: overlay ? "block" : "none"}'
-        style="position: absolute; top: 0px; left: 0px; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5);"
-      />
+      <div v-if='targetData.canvas !== false'>
+        <canvas
+          ref="canvas"
+          style="width: 100%; height: 100%;"
+        />
+        <!-- drag selection !-->
+        <div :style="dragSelectStyle"/>
+        <!-- hints overlay !-->
+        <div 
+          class='overlay'
+          :style='{display: overlay ? "block" : "none"}'
+          style="position: absolute; top: 0px; left: 0px; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5);"
+        />
+      </div>
+
       <!-- relative positioning of components !-->
       <div
         class="offset"
@@ -49,7 +52,7 @@
           :interactable="!regionSelect"
           @change-state="changeState"
           @add-history="addHistory"
-        /> <!-- @onmouseleave="DeleteHoverCanvas" -->
+        />
       </div>
       <!-- cutouts to mask interaction regions !-->
       <svg 
@@ -93,6 +96,7 @@ import loomBrushingBox from './loomComponents/loomBrushingBox.vue'
 import loomButton from './loomComponents/loomButton.vue'
 import loomHover from './loomComponents/loomHover.vue'
 import loomDropdown from './loomComponents/loomDropdown.vue'
+import loomUSA from './loomComponents/loomUSA.vue'
 
 export default {
   name: 'loomVideoCanvas',
@@ -104,6 +108,7 @@ export default {
     loomHover,
     loomDropdown,
     loomBrushingBox,
+    loomUSA,
   },
 
   data: function(){
@@ -111,16 +116,13 @@ export default {
       selected: false,
       dragStart: {x: 0, y: 0},
       dragCurr: {x: 0, y: 0},
+      lastMouseLoc: {x: 0, y: 0},
       mouseLoc: {x: 0, y: 0},
       dragging: false,
       reshapePolygonMode: false,
       resizePolygonMode: false,
-
-      width: 0,
-      height: 0,
       ctx: null,
-      
-      // hoverMapping: {},
+    
       polygonMasks: {},
       polygonReshapeIdx: -1,
 
@@ -135,6 +137,10 @@ export default {
     currentTargets(){ return utils.currentTargets(this.current_state, this.targets); },
     id(){ return this.targetData.id; },
     page(){ return this.targetData.page; },
+    width(){ return this.targetData.width || this.info.window.width; },
+    height(){ return this.targetData.height || this.info.window.height; },
+    top(){ return this.targetData.top || 0 },
+    left(){ return this.targetData.left || 0 },
     parentCanvas(){ return this.$parent.$refs[`loomVideoCanvas-${this.targetData.parentCanvas}`] || false; },
     currentPolygonPath2D(){ return utils.polyToPath2D(this.currentPolygonMask,0,0); },
     currentPolygonMaskString(){ return utils.polyToPolyString(this.currentPolygonMask,0,0); },
@@ -297,12 +303,11 @@ export default {
       });
     },
 
-    resizePolygon(e){
-      //TODO: RESIZING WOO
-      //change this.width/this.height or xVideoRatio/yVideoRatio idk which, probably this.width
-      const delta = e.delta;
+    resizePolygon(){
+      const delta = {x: this.mouseLoc.x - this.lastMouseLoc.x, y: this.mouseLoc.y - this.lastMouseLoc.y };
       this.targetData.width = this.width = this.width + delta.x;
       this.targetData.height = this.height = this.height + delta.y;
+
     },
 
     reshapePolygon(e){
@@ -379,14 +384,15 @@ export default {
     },
   
     onScreenMouseMove(e){
+      this.lastMouseLoc = this.mouseLoc;
       this.mouseLoc = this.clientToOffset(e);
       if(this.reshapePolygonMode){
         this.reshapePolygon(this.mouseLoc);
         return;
-      } else if(this.resizePolygonMode){
-        this.resizePolygon(ths.mouseLoc);
+      } else if(this.resizePolygonMode && this.targetData.resizeable == true){
+        this.resizePolygon();
         return;
-      } else if(!this.dragMode) {
+      } else if(!this.dragMode && this.targetData.reshapeable !== false) {
         if(this.isPolygonVertexHovered(this.mouseLoc) >= 0){
           document.body.style.cursor = 'move';
         } else if(this.isPolygonLineHovered(this.mouseLoc) >= 0) {
@@ -396,6 +402,7 @@ export default {
 
       if(!this.selected)  return;
       if(!this.dragging)  return;
+      if(this.targetData.movable === false)  return;
 
       this.dragCurr = this.mouseLoc;
       if(this.dragMode){
@@ -407,20 +414,24 @@ export default {
     onScreenMouseDown(e){
       const mouseLoc = this.clientToOffset(e);
       const shift = e.shiftKey;
-      const reshapePoly = this.isPolygonVertexHovered(mouseLoc);
-      if(reshapePoly >= 0 && !this.dragMode){
-        if(shift){
-          this.resizePolygonMode = true;
-        } else {
-          this.reshapePolygonMode = true;
-          this.polygonReshapeIdx = reshapePoly;
-        }
-      }
 
-      const newVertex = this.isPolygonLineHovered(mouseLoc);
-      if(newVertex >= 0 && reshapePoly < 0){  
-        this.addNewVertex(newVertex, mouseLoc);
-        this.redraw();
+      if(this.targetData.reshapeable !== false){
+        const reshapePoly = this.isPolygonVertexHovered(mouseLoc);
+        if(reshapePoly >= 0 && !this.dragMode && this.targetData.reshapeable !== false){
+          if(shift && this.targetData.resizeable){
+            this.resizePolygonMode = true;
+          } else {
+            this.resizePolygonMode = false;
+            this.reshapePolygonMode = true;
+            this.polygonReshapeIdx = reshapePoly;
+          }
+        }
+
+        const newVertex = this.isPolygonLineHovered(mouseLoc);
+        if(newVertex >= 0 && reshapePoly < 0){  
+          this.addNewVertex(newVertex, mouseLoc);
+          this.redraw();
+        }
       }
     },
 
@@ -443,6 +454,7 @@ export default {
     onScreenMouseUp(e){
       this.dragging = false;
       this.selected = false;
+      this.resizePolygonMode = false;
       this.reshapePolygonMode = false;
       document.body.style.cursor = 'default';
     },
@@ -475,7 +487,7 @@ export default {
     },
 
     draw(videoPlayer, emit = true){
-      if(this.throttle || !videoPlayer) return;
+      if(this.throttle || !videoPlayer || this.targetData.canvas === false) return;
     
       const xVideoRatio = videoPlayer.videoWidth/videoPlayer.clientWidth;
       const yVideoRatio = videoPlayer.videoHeight/videoPlayer.clientHeight;
@@ -553,47 +565,49 @@ export default {
   },
 
   mounted(){
-    this.ctx = this.$refs.canvas.getContext('2d');
-    this.ctx.save();
-
-    this.width = this.targetData.width || this.info.window.width;
-    this.height = this.targetData.height || this.info.window.height;
-
-    this.$refs.canvas.width = this.width;
-    this.$refs.canvas.height = this.height;
-
-    if(this.page == this.$parent.currentPage)
-      this.targetData.current_state_id = this.start_state_id;
-  
-    this.changeState(this.current_state.id, 0, false);
-    if(this.targetData.region){
-      this.polygonMasks[this.current_state.id] = this.targetData.region;
-    } else {
-      this.polygonMasks[this.current_state.id] = [
-        {x: 0, y: 0},
-        {x: this.width, y: 0},
-        {x: this.width, y: this.height},
-        {x: 0, y: this.height}
-      ];
+    if(this.$refs.canvas){
+      this.ctx = this.$refs.canvas.getContext('2d');
+      this.ctx.save();
+      this.$refs.canvas.width = this.width;
+      this.$refs.canvas.height = this.height;
     }
 
-    if(this.targetData.makeCutout && this.parentCanvas){
-      const region = this.polygonMasks[this.current_state.id];
+    if(this.page == this.$parent.currentPage){
+      this.targetData.current_state_id = this.start_state_id;
+    }
 
-      const minX = Math.min(...region.map(p => p.x));
-      const maxX = Math.max(...region.map(p => p.x));
-      const minY = Math.min(...region.map(p => p.y));
-      const maxY = Math.max(...region.map(p => p.y));
+    if(this.current_state !== undefined){
+      this.changeState(this.current_state.id, 0, false);
 
-      const pcutouts = this.parentCanvas.targetData.cutouts;
-      pcutouts.push({
-        poly: utils.polyToPolyString(this.currentPolygonMask, 0, 0),
-        width: maxX-minX,
-        height: maxY-minY,
-        top: minY,
-        left: minX,
-        id: this.targetData.id,
-      });
+      if(this.targetData.region){
+        this.polygonMasks[this.current_state.id] = this.targetData.region;
+      } else {
+        this.polygonMasks[this.current_state.id] = [
+          {x: 0, y: 0},
+          {x: this.width, y: 0},
+          {x: this.width, y: this.height},
+          {x: 0, y: this.height}
+        ];
+      }
+
+      if(this.targetData.makeCutout && this.parentCanvas){
+        const region = this.polygonMasks[this.current_state.id];
+
+        const minX = Math.min(...region.map(p => p.x));
+        const maxX = Math.max(...region.map(p => p.x));
+        const minY = Math.min(...region.map(p => p.y));
+        const maxY = Math.max(...region.map(p => p.y));
+
+        const pcutouts = this.parentCanvas.targetData.cutouts;
+        pcutouts.push({
+          poly: utils.polyToPolyString(this.currentPolygonMask, 0, 0),
+          width: maxX-minX,
+          height: maxY-minY,
+          top: minY,
+          left: minX,
+          id: this.targetData.id,
+        });
+      }
     }
     
     if(this.targetData.startupFn) this.targetData.startupFn(this);

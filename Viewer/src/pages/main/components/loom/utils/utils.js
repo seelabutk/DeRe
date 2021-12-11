@@ -7,7 +7,7 @@ function currentTargets(current_state, targets){
       isChild(current_state, target) ||
       isSibling(targets, target, current_state) ||
       target.parent_id == '-1'
-    );
+    ) || target.important;
   });
   return cts;
 }
@@ -136,6 +136,20 @@ function rectToPoly(rect){
   ];
 }
 
+function boundingBox(poly){
+  let xmin = Infinity;
+  let xmax = 0;
+  let ymin = Infinity
+  let ymax = 0;
+  poly.forEach(p => {
+    xmin = Math.min(xmin, p.x);
+    xmax = Math.max(xmax, p.x);
+    ymin = Math.min(ymin, p.y);
+    ymax = Math.max(ymax, p.y);
+  })
+  return {xmin, xmax, ymin, ymax};
+}
+
 function bound(v, min, max){
   return Math.min(Math.max(min, v), max);
 }
@@ -179,6 +193,7 @@ export default {
   polyToPath2D,
   polyToPolyString,
   rectToPoly,
+  boundingBox,
   bound,
   dist,
 
