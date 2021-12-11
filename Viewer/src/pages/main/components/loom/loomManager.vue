@@ -158,11 +158,14 @@ export default {
 
   data: function(){
     return {
-      //state
+      //modes
       appModes: [],
+      renderModes: [],
+      
+      //state
       appMode: null,
       renderMode: null,
-      renderModes: [],
+      
       regionSelect: false,
       hintHelpState: false,
       dragMode: true,

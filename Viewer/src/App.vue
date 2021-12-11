@@ -21,7 +21,7 @@ export default {
     });
     window.addEventListener("mousedown", e => {
       this.emitter.emit('mousedown', e);
-    })
+    });
   }
 };
 

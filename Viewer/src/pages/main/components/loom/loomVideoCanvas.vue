@@ -113,6 +113,7 @@ export default {
       dragCurr: {x: 0, y: 0},
       mouseLoc: {x: 0, y: 0},
       dragging: false,
+      reshapePolygonMode: false,
       resizePolygonMode: false,
 
       width: 0,
@@ -121,7 +122,7 @@ export default {
       
       // hoverMapping: {},
       polygonMasks: {},
-      polygonResizeIdx: -1,
+      polygonReshapeIdx: -1,
 
       updateParentCurrentState: true,
       lastFrame: null,
@@ -297,15 +298,23 @@ export default {
     },
 
     resizePolygon(e){
+      //TODO: RESIZING WOO
+      //change this.width/this.height or xVideoRatio/yVideoRatio idk which, probably this.width
+      const delta = e.delta;
+      this.targetData.width = this.width = this.width + delta.x;
+      this.targetData.height = this.height = this.height + delta.y;
+    },
+
+    reshapePolygon(e){
       const minD = 10;
-      const c = this.polygonResizeIdx;
+      const c = this.polygonReshapeIdx;
       const n = this.currentPolygonMask.length;
       const nidx = (c+1)%n;
       const pidx = ((c-1)%n+n)%n;
       if(utils.dist(this.currentPolygonMask[c], this.currentPolygonMask[nidx]) < minD 
       || utils.dist(this.currentPolygonMask[c], this.currentPolygonMask[pidx]) < minD){
         this.currentPolygonMask.splice(c, 1);
-        this.resizePolygonMode = false;
+        this.reshapePolygonMode = false;
         this.redraw();
         return;
       }
@@ -328,8 +337,8 @@ export default {
 
     addNewVertex(vertIdx, e){
       this.currentPolygonMask.splice(vertIdx+1, 0, e);
-      this.resizePolygonMode = true;
-      this.polygonResizeIdx = vertIdx+1;
+      this.reshapePolygonMode = true;
+      this.polygonReshapeIdx = vertIdx+1;
       this.redraw();
     },
 
@@ -371,8 +380,11 @@ export default {
   
     onScreenMouseMove(e){
       this.mouseLoc = this.clientToOffset(e);
-      if(this.resizePolygonMode){
-        this.resizePolygon(this.mouseLoc);
+      if(this.reshapePolygonMode){
+        this.reshapePolygon(this.mouseLoc);
+        return;
+      } else if(this.resizePolygonMode){
+        this.resizePolygon(ths.mouseLoc);
         return;
       } else if(!this.dragMode) {
         if(this.isPolygonVertexHovered(this.mouseLoc) >= 0){
@@ -384,6 +396,7 @@ export default {
 
       if(!this.selected)  return;
       if(!this.dragging)  return;
+
       this.dragCurr = this.mouseLoc;
       if(this.dragMode){
         this.targetData.top += e.movementY;
@@ -392,15 +405,20 @@ export default {
     },
 
     onScreenMouseDown(e){
-      let mouseLoc = this.clientToOffset(e);
-      const resizePoly = this.isPolygonVertexHovered(mouseLoc);
-      if(resizePoly >= 0 && !this.dragMode){
-        this.resizePolygonMode = true;
-        this.polygonResizeIdx = resizePoly;
+      const mouseLoc = this.clientToOffset(e);
+      const shift = e.shiftKey;
+      const reshapePoly = this.isPolygonVertexHovered(mouseLoc);
+      if(reshapePoly >= 0 && !this.dragMode){
+        if(shift){
+          this.resizePolygonMode = true;
+        } else {
+          this.reshapePolygonMode = true;
+          this.polygonReshapeIdx = reshapePoly;
+        }
       }
 
       const newVertex = this.isPolygonLineHovered(mouseLoc);
-      if(newVertex >= 0 && resizePoly < 0){  
+      if(newVertex >= 0 && reshapePoly < 0){  
         this.addNewVertex(newVertex, mouseLoc);
         this.redraw();
       }
@@ -425,7 +443,7 @@ export default {
     onScreenMouseUp(e){
       this.dragging = false;
       this.selected = false;
-      this.resizePolygonMode = false;
+      this.reshapePolygonMode = false;
       document.body.style.cursor = 'default';
     },
 
@@ -538,8 +556,8 @@ export default {
     this.ctx = this.$refs.canvas.getContext('2d');
     this.ctx.save();
 
-    this.width = this.info.window.width;
-    this.height = this.info.window.height;
+    this.width = this.targetData.width || this.info.window.width;
+    this.height = this.targetData.height || this.info.window.height;
 
     this.$refs.canvas.width = this.width;
     this.$refs.canvas.height = this.height;
