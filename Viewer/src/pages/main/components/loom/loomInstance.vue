@@ -390,7 +390,11 @@ export default {
 
 
     changeVideoFrame(page, videoCanvasID, frameNo, emit=true){
-      if(!frameNo && frameNo !== 0) return
+      if(!frameNo && frameNo !== 0) {
+        this.$refs[`loomVideoCanvas-${videoCanvasID}`].draw(null, emit);
+        return;
+      }
+
       const vp = this.videoPlayers[this.lastUsedVideoPlayer];
       this.lastUsedVideoPlayer = (this.lastUsedVideoPlayer+1)%this.numVideoPlayers;
       const self = this;

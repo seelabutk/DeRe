@@ -106,6 +106,10 @@ function absdiff(img1, img2){
   return img;
 }
 
+function scalePolygon(poly, scale){
+  poly.forEach(p => {p.x *= scale.x; p.y *= scale.y});
+}
+
 function polyToPath2D(poly){
   let str = '';
   str += `M ${poly[0].x} ${poly[0].y} `;
@@ -190,6 +194,7 @@ export default {
   absdiff,
 
   //poly utils
+  scalePolygon,
   polyToPath2D,
   polyToPolyString,
   rectToPoly,

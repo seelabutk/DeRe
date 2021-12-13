@@ -238,15 +238,25 @@ export default {
     },
 
     addMap(){
+      const width = 100;
+      const height = 100;
+
       this.newVideoTarget({
         reshapeable: false,
-        region: utils.rectToPoly({x: 0, y: 0, width: 100, height: 100, }),
-        canvas: false,
+        resizeable: true,
+        region: utils.rectToPoly({x: 0, y: 0, width, height, }),
+        width,
+        height,
         targets: [{
           actor: 'USA',
           id: '0',
-          important: true,
+          important: true,  
         }],
+        startupFn: c => {
+          c.lastFrame = 0;
+          delete c.targetData.startupFn;
+        },
+        drawImage: false,
         current_state_id: '0',
       }, undefined, false);
     },

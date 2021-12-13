@@ -16,7 +16,7 @@
       @mouseleave="dragging=false"
     >
       <!-- canvas element to redraw video !-->
-      <div v-if='targetData.canvas !== false'>
+      <div>
         <canvas
           ref="canvas"
           style="width: 100%; height: 100%;"
@@ -144,11 +144,14 @@ export default {
     parentCanvas(){ return this.$parent.$refs[`loomVideoCanvas-${this.targetData.parentCanvas}`] || false; },
     currentPolygonPath2D(){ return utils.polyToPath2D(this.currentPolygonMask,0,0); },
     currentPolygonMaskString(){ return utils.polyToPolyString(this.currentPolygonMask,0,0); },
-    currentPolygonMask(){ 
+    currentPolygonMaskID(){
       for(let cs = this.current_state; cs && cs.parent_id != cs.id; cs = this.targets[cs.parent_id]){
-        if(this.polygonMasks[cs.id]) return this.polygonMasks[cs.id];
+        if(this.polygonMasks[cs.id]) return cs.id;
       }
-      return Object.values(this.polygonMasks)[0];
+      return 0;
+    },
+    currentPolygonMask(){ 
+      return this.polygonMasks[this.currentPolygonMaskID];
     },
     dragSelectStyle: function(){
       const top = Math.min(this.dragStart.y, this.dragCurr.y) + 'px';
@@ -304,10 +307,14 @@ export default {
     },
 
     resizePolygon(){
-      const delta = {x: this.mouseLoc.x - this.lastMouseLoc.x, y: this.mouseLoc.y - this.lastMouseLoc.y };
-      this.targetData.width = this.width = this.width + delta.x;
-      this.targetData.height = this.height = this.height + delta.y;
-
+      const delta = { x: this.mouseLoc.x - this.lastMouseLoc.x, y: this.mouseLoc.y - this.lastMouseLoc.y };
+      const scale = { x: (this.targetData.width + delta.x)/this.targetData.width, y: (this.targetData.height + delta.y)/this.targetData.height };
+      this.targetData.width += delta.x;
+      this.targetData.height += delta.y;
+      this.$refs.canvas.width = this.width;
+      this.$refs.canvas.height = this.height;
+      utils.scalePolygon(this.polygonMasks[this.currentPolygonMaskID], scale);
+      this.redraw();
     },
 
     reshapePolygon(e){
@@ -392,7 +399,7 @@ export default {
       } else if(this.resizePolygonMode && this.targetData.resizeable == true){
         this.resizePolygon();
         return;
-      } else if(!this.dragMode && this.targetData.reshapeable !== false) {
+      } else if(!this.dragMode && this.targetData.reshapeable !== false || this.targetData.resizeable == true) {
         if(this.isPolygonVertexHovered(this.mouseLoc) >= 0){
           document.body.style.cursor = 'move';
         } else if(this.isPolygonLineHovered(this.mouseLoc) >= 0) {
@@ -415,22 +422,24 @@ export default {
       const mouseLoc = this.clientToOffset(e);
       const shift = e.shiftKey;
 
-      if(this.targetData.reshapeable !== false){
+      if(this.targetData.reshapeable !== false || this.targetData.resizeable == true){
         const reshapePoly = this.isPolygonVertexHovered(mouseLoc);
-        if(reshapePoly >= 0 && !this.dragMode && this.targetData.reshapeable !== false){
+        if(reshapePoly >= 0 && !this.dragMode){
           if(shift && this.targetData.resizeable){
             this.resizePolygonMode = true;
-          } else {
+          } else if(this.targetData.reshapeable !== false) {
             this.resizePolygonMode = false;
             this.reshapePolygonMode = true;
             this.polygonReshapeIdx = reshapePoly;
           }
         }
 
-        const newVertex = this.isPolygonLineHovered(mouseLoc);
-        if(newVertex >= 0 && reshapePoly < 0){  
-          this.addNewVertex(newVertex, mouseLoc);
-          this.redraw();
+        if(reshapePoly < 0 && this.targetData.reshapeable !== false){
+          const newVertex = this.isPolygonLineHovered(mouseLoc);
+          if(newVertex >= 0){  
+            this.addNewVertex(newVertex, mouseLoc);
+            this.redraw();
+          }
         }
       }
     },
@@ -479,7 +488,6 @@ export default {
       ctx.closePath();
       ctx.stroke();
       poly.forEach(p => square(p.x, p.y));
-      
     },
 
     redraw(emit=false){
@@ -487,28 +495,30 @@ export default {
     },
 
     draw(videoPlayer, emit = true){
-      if(this.throttle || !videoPlayer || this.targetData.canvas === false) return;
+      if(this.throttle || !videoPlayer) return;
     
-      const xVideoRatio = videoPlayer.videoWidth/videoPlayer.clientWidth;
-      const yVideoRatio = videoPlayer.videoHeight/videoPlayer.clientHeight;
-
       this.ctx.restore();
       this.ctx.save();
       this.ctx.fillStyle = "rgba(0, 0, 0, 0)";
       this.ctx.clearRect(0, 0, this.width, this.height);
 
-      if(this.currentPolygonMask){
+      /* if(this.currentPolygonMask){
         this.ctx.clip(this.currentPolygonPath2D);
+      } */
+      
+      if(this.targetData.drawImage !== false){
+        const xVideoRatio = videoPlayer.videoWidth/videoPlayer.clientWidth;
+        const yVideoRatio = videoPlayer.videoHeight/videoPlayer.clientHeight;
+        this.ctx.drawImage(videoPlayer, 0, 0, 
+          this.width*xVideoRatio, this.height*yVideoRatio, 
+          0, 0, this.width, this.height
+        );
       }
-      this.ctx.drawImage(videoPlayer, 0, 0, 
-        this.width*xVideoRatio, this.height*yVideoRatio, 
-        0, 0, this.width, this.height
-      );
-
+      
       if(!this.dragMode && this.currentPolygonMask){
         this.drawPolyOutline(this.ctx, this.currentPolygonMask);
       }
-      
+
       if(emit) this.emitter.emit('post_redraw' + this.targetData.id)
       this.processFrame();
   
@@ -565,12 +575,10 @@ export default {
   },
 
   mounted(){
-    if(this.$refs.canvas){
-      this.ctx = this.$refs.canvas.getContext('2d');
-      this.ctx.save();
-      this.$refs.canvas.width = this.width;
-      this.$refs.canvas.height = this.height;
-    }
+    this.ctx = this.$refs.canvas.getContext('2d');
+    this.ctx.save();
+    this.$refs.canvas.width = this.width;
+    this.$refs.canvas.height = this.height;
 
     if(this.page == this.$parent.currentPage){
       this.targetData.current_state_id = this.start_state_id;
@@ -610,7 +618,9 @@ export default {
       }
     }
     
-    if(this.targetData.startupFn) this.targetData.startupFn(this);
+    if(this.targetData.startupFn) {
+      this.targetData.startupFn(this);
+    }
     
     this.emitter.on('clearSelection', this.clearSelection);
     this.emitter.on('deselect', this.deselect);
