@@ -347,7 +347,7 @@ export default {
       }
     },
     
-    newVideoTarget(obj={}, mode=undefined, clear=false){
+    async newVideoTarget(obj={}, mode=undefined, clear=false){
       if(mode === undefined)  mode = this.renderAppMode;
 
       let page = '-1';
@@ -385,7 +385,10 @@ export default {
         processed: true,
         ...obj //to overwrite preceding values
       };
-      return this.videoTargetCache[mode][page][id];
+
+      return await this.$nextTick(() => {
+        return this.$refs[`loomVideoCanvas-${id}`]
+      });
     },
 
 
@@ -449,7 +452,6 @@ export default {
     videoCacheModeChange(mode){
       if(!this.videoTargetCache.hasOwnProperty(mode)){
         this.newVideoTarget({
-          parentCanvas: false,
           processed: false,
         }, mode);
       }

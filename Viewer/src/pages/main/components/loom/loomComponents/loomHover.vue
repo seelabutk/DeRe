@@ -1,7 +1,9 @@
 <template>
   <div
-  ref="target" 
-  :style="calcStyle">
+    ref="target" 
+    :id="componentID"
+    :style="calcStyle"
+  >
     <svg 
       v-if="targetData.shape.type == 'poly'"
       :width="calcStyle.width"

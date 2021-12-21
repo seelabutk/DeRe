@@ -2,13 +2,22 @@
 const mixin = {
   props: ['parent', 'targetData', 'showHint', 'interactable', 'current_state', 'targets'],
   emits: ['changeState', 'addHistory'],
+  name: 'loomComponent',
   data: function(){
     return {
+      isLoomComponent: true,
       points: null,
       eventData: {},
     };
   },
   computed: {
+    renderMode(){ return this.$parent.renderMode; }, 
+    instanceID(){ return this.$parent.instanceID; },
+    page(){ return this.$parent.page; },
+    vcid(){ return this.$parent.id; },
+    id(){ return this.targetData.id; },
+    frame(){ return this.targetData.id; },
+    componentID(){ return `${this.instanceID}-${this.page}-${this.vcid}-${this.id}` },
     calcHintStyle(){
       return {
         'fill': 'rgba(246, 230, 80, 0.7)',
@@ -55,6 +64,11 @@ const mixin = {
     if(this.$refs.target){
       this.$refs.target.style.display = this.interactable ? 'block': 'none';
     }
+    this.emitter.emit('addComponent', [this.componentID, this]);
+  },
+
+  beforeUnmount(){
+    this.emitter.emit('removeComponent', this.componentID);
   },
 
   watch: {

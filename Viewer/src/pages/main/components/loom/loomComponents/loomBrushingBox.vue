@@ -1,7 +1,9 @@
 <template>
   <div
-  ref="target" 
-  :style="calcStyle">
+    ref="target" 
+    :id="componentID"
+    :style="calcStyle"
+  >
     <svg 
       v-if="targetData.shape.type == 'poly'"
       :width="calcStyle.width"
@@ -9,7 +11,7 @@
       style="fill: transparent; stroke-width: 5;"
       :style="showHint ? calcHintStyle : {}"
     >
-      <polygon ref="polygon"
+      <polygon ref="polygon"    
         v-on="eventData"
         :points="points"
         style="cursor: cell;"

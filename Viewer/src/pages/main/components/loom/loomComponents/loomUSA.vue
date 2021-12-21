@@ -1,9 +1,8 @@
 <template>
   <div
-  ref="target" 
+    ref="target" 
     :style="calcStyle"
   >
-  
   </div>
 </template>
 
@@ -25,7 +24,6 @@ export default {
         width: this.width + 'px',
         height: this.height + 'px',
         backgroundColor: 'rgba(0,0,0,0.2)',
-        // pointerEvents: 'none',
         backgroundImage: 'url(assets/USA.png)',
         backgroundSize: `${this.width}px ${this.height}px`,
       };
@@ -89,10 +87,35 @@ export default {
 
   methods: {
     getRelativeStateCenters(){
-      return Object.fromEntries(Object.entries(this.stateCenters).map(([state, loc]) => {
-        return [state, {x: loc.x*this.width, y: loc.y*this.height}];
+      const box = this.$refs.target.getBoundingClientRect();
+      return Object.fromEntries(Object.entries(this.stateCenters).map(([state, loc]) => {  
+        return [state, {x: loc.x*this.width + box.x, y: loc.y*this.height + box.y }];
       }));
+    },
+    async getMapping(){
+      this.emitter.emit('loomManage', {'regionSelect': false});
+      return await this.$nextTick(() => {
+        const linkFroms = Object.entries(this.getRelativeStateCenters()).map(([state, loc]) => {
+          const els = document.elementsFromPoint(...Object.values(loc));
+          const el = els.find(el => el.id != '');
+          if(el === undefined)  return null;
+          const id = el.id;
+          
+          const component = this.$parent.$parent.$parent.activeComponents[id];
+          if(component === undefined || !component.isLoomComponent) return null;
+          return {
+            mode: component.renderMode,
+            instance: component.instanceID,
+            page: component.page,
+            vcid: component.vcid,
+            frame: component.frame,
+          };
+        }).filter(ld => ld != null);
+        this.emitter.emit('loomManage', {'regionSelect': true});
+        return linkFroms;
+      });
     }
+    
   },
 
   mounted: function(){},

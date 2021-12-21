@@ -1,8 +1,9 @@
 <template>
   <select 
     ref="dropdown" 
-    @change='onChange' 
+    :id="componentID"
     :style="calcStyle"
+    @change='onChange' 
   >
     <option v-for="id in Object.keys(targetData.children)"
       :key="id"
@@ -25,7 +26,9 @@ export default {
     },
   },
   mounted(){
-    this.$refs.dropdown.value=this.current_state.name;
+    this.$nextTick(() =>{
+      this.$refs.dropdown.value = this.$parent.current_state.name;
+    });
   }
 }
 </script>

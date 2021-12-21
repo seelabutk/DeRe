@@ -96,14 +96,14 @@
 
         <!-- LINK TARGET - push once for enable linking, again to complete linking !-->
         <div style='grid-area: link' :style="linkVideoCanvasStyle">
-          <span class="text">{{linkData.linkMode == 'linking' ? 'linking' : linkData.linkMode == 'linkingTo' ? 'link to' : 'link'}}</span> <br>
-          <font-awesome-icon icon="link" @click="() => { if(linkData.linkMode == 'selectable') linkData.linkMode = 'linking' }"/>
+          <span class="text">{{linkData.linkMode == 'linkingFrom' ? 'linking' : linkData.linkMode == 'linkingTo' ? 'link to' : 'link'}}</span> <br>
+          <font-awesome-icon icon="link" @click="() => { if(linkData.linkMode == 'selectable') linkData.linkMode = 'linkingFrom' }"/>
         </div>
         
         <!-- linked frames map region !-->
-        <div style='grid-area: mapRegion'>
+        <div style='grid-area: mapRegion' :style="mapLinkStyle">
           <span class="text">link map</span> <br>
-          <font-awesome-icon icon='map' style='color: white' @click="addMap"/>
+          <font-awesome-icon icon='map' @click="mapLinkClicked"/>
         </div>
 
       </div>
@@ -183,9 +183,17 @@ export default {
         firstLink: null,
         linkedCanvases: new DSet(),
       },
+      mapLinkData: {
+        mapLinkMode: 'selectable',
+        firstLink: null,
+        mapComponent: null,
+      },
       appConfig: {},
       //settings
       loomMenuWidth: 120,
+
+      //components
+      activeComponents: [],
     };
   },
 
@@ -200,30 +208,47 @@ export default {
       };
     },
 
-    linkVideoCanvasStyle: function(){
-      if(this.linkData.linkMode == 'none'){
-        return {
-          color: 'grey',
-          cursor: 'default',
-        };
+    mapLinkStyle: function(){
+      const style = {cursor: 'pointer'};
+      switch(this.mapLinkData.mapLinkMode){
+        case 'selectable':
+          style.color = 'white';
+          break;
+        case 'linkingFrom':
+          style.color = 'green';
+          break;
+        case 'linkingTo': 
+          style.color = 'red';
+          break;
       }
-      else if(this.linkData.linkMode == 'selectable'){
-        return {
-          color: 'white',
-          cursor: 'pointer',
-        };
-      }else if(this.linkData.linkMode == 'linking'){
-        return {
-          color: 'green',
-          cursor: 'pointer',
-        };
-      }else if(this.linkData.linkMode == 'linkingTo'){
-        return {
-          color: 'red',
-          cursor: 'pointer',
-        }
+      return style;
+    },
+
+    linkVideoCanvasStyle: function(){
+      switch(this.linkData.linkMode){
+        case 'none':
+          return {
+            color: 'grey',
+            cursor: 'default',
+          };
+        case 'selectable':
+          return {
+            color: 'white',
+            cursor: 'pointer',
+          };
+        case 'linkingFrom':
+          return {
+            color: 'green',
+            cursor: 'pointer',
+          };
+        case 'linkingTo':
+          return {
+            color: 'red',
+            cursor: 'pointer',
+          }
       }
     },
+
   },
 
   methods: {
@@ -237,11 +262,11 @@ export default {
       });
     },
 
-    addMap(){
+    async addMap(){
       const width = 100;
       const height = 100;
 
-      this.newVideoTarget({
+      return await this.newVideoTarget({
         reshapeable: false,
         resizeable: true,
         region: utils.rectToPoly({x: 0, y: 0, width, height, }),
@@ -261,9 +286,9 @@ export default {
       }, undefined, false);
     },
 
-    newVideoTarget(obj=null, mode=undefined, clear=true){
+    async newVideoTarget(obj=null, mode=undefined, clear=true){
       if(this.$refs[this.currVideoCanvasSelected.instanceID]){
-        this.$refs[this.currVideoCanvasSelected.instanceID].newVideoTarget(obj, mode, clear);
+        return await this.$refs[this.currVideoCanvasSelected.instanceID].newVideoTarget(obj, mode, clear);
       }
     },
 
@@ -347,47 +372,64 @@ export default {
       this.init();
     },
 
-    videoCanvasClicked(){
-      this.linkVideoCanvas();
-      if(this.linkData.linkMode === 'linking') this.linkData.linkMode = 'linkingTo';
-      else if(this.linkData.linkMode == 'linkingTo') this.linkData.linkMode = 'selectable';
+    async mapLinkClicked(){
+      if(this.mapLinkData.mapLinkMode == 'selectable'){
+        this.mapLinkData.mapComponent = (await this.addMap()).$refs['target0'];
+        this.mapLinkData.mapLinkMode = 'linkingFrom';
+      } else if(this.mapLinkData.mapLinkMode == 'linkingFrom'){
+        this.mapLinkData.firstLink = await this.mapLinkData.mapComponent.getMapping();
+        console.log(this.mapLinkData.firstLink);
+        this.mapLinkData.mapLinkMode = 'linkingTo';
+      } else if(this.mapLinkData.mapLinkMode == 'linkingTo'){
+        const lds = this.mapLinkData.mapComponent.getMapping();
+        const fls = this.mapLinkData.firstLink;
+        Object.keys(lds).forEach(key => {
+          if(fls.hasOwnProperty(key)){
+            this.createLink(fls[key], lds[key]);
+          }
+        });
+        this.mapLinkData.mapLinkMode = 'selectable';
+      }
     },
 
-    linkVideoCanvas(){
-      if(this.linkData.linkMode != 'linking' && this.linkData.linkMode != 'linkingTo')  return;
+    videoCanvasClicked(){
+      if(this.linkData.linkMode === 'linkingFrom') {
+        this.linkData.firstLink = this.createLinkEntry(this.currVideoCanvasSelected);
+        this.linkData.linkMode = 'linkingTo';
+      }
+      else if(this.linkData.linkMode === 'linkingTo'){
+        const ld = this.createLinkEntry(this.currVideoCanvasSelected);
+        this.createLink(this.linkData.firstLink, ld);
+        this.linkData.linkMode = 'selectable';
+      }
+    },
 
-      const ld = {
-        mode: this.currVideoCanvasSelected.renderMode,
-        instance: this.currVideoCanvasSelected.instanceID,
-        page: this.currVideoCanvasSelected.page,
-        vcid: this.currVideoCanvasSelected.id,
-        frame: this.currVideoCanvasSelected.lastFrame
+    createLinkEntry(vc){
+      return {
+        mode: vc.renderMode,
+        instance: vc.instanceID,
+        page: vc.page,
+        vcid: vc.id,
+        frame: vc.lastFrame
+      }
+    },
+
+    createLink(fl, ld){
+      let linkFromName, linkToName;
+
+      if(fl.instance === ld.instance){//instance linking - all frames linked
+        linkToName = `${fl.instance}_${fl.page}_${fl.vcid}_all`;
+        linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_all`;
+      } else { //frame linking - only one frame linked - cross-instance
+        linkToName = `${fl.instance}_${fl.page}_${fl.vcid}_${fl.frame}`;
+        linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_${ld.frame}`;
       }
 
-      if(this.linkData.linkMode == 'linking'){
-        this.linkData.firstLink = ld;
-        return;
-      }
-
-      if(this.linkData.linkMode == 'linkingTo'){ 
-        const fl = this.linkData.firstLink;
-        let linkFromName, linkToName;
-
-        if(fl.instance === ld.instance){//instance linking - all frames linked
-          linkToName = `${fl.instance}_${fl.page}_${fl.vcid}_all`;
-          linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_all`;
-        } else { //frame linking - only one frame linked - cross-instance
-          linkToName = `${fl.instance}_${fl.page}_${fl.vcid}_${fl.frame}`;
-          linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_${ld.frame}`;
-        }
-
-        if(!this.linkData.linkedCanvases.exists(linkToName))    this.linkData.linkedCanvases.add(linkToName, fl);
-        if(!this.linkData.linkedCanvases.exists(linkFromName))  this.linkData.linkedCanvases.add(linkFromName, ld);
-        this.linkData.linkedCanvases.merge(linkToName, linkFromName);  
-        this.$refs[this.currVideoCanvasSelected.instanceID].addInstanceLink(fl, ld);
-        this.linkData.firstLink = null;
-        return;
-      }
+      if(!this.linkData.linkedCanvases.exists(linkToName))    this.linkData.linkedCanvases.add(linkToName, fl);
+      if(!this.linkData.linkedCanvases.exists(linkFromName))  this.linkData.linkedCanvases.add(linkFromName, ld);
+      this.linkData.linkedCanvases.merge(linkToName, linkFromName);  
+      this.$refs[this.currVideoCanvasSelected.instanceID].addInstanceLink(fl, ld);
+      this.linkData.firstLink = null;
     },
 
     changeVideoFrame(instance, page, vcid, frame, emit){
@@ -438,6 +480,10 @@ export default {
         this.$refs[this.pasteBin.instanceID].paste(targetData);
       }
     },
+
+    loomManage(m){ Object.keys(m).forEach(k => { this[k] =  m[k]}); },
+    addComponent([name, component]){ this.activeComponents[name] = component },
+    removeComponent(name){ delete this.activeComponents[name]; },
   },
 
   mounted(){
@@ -451,7 +497,9 @@ export default {
     this.emitter.on("clickVideoCanvas", this.videoCanvasClicked);
     this.emitter.on("selectVideoCanvas", vc => this.currVideoCanvasSelected = vc );
     this.emitter.on('changeVideoFrame', t => this.changeVideoFrame(...t));
-    
+    this.emitter.on('addComponent', this.addComponent);
+    this.emitter.on('removeComponet', this.removeComponent);
+    this.emitter.on("loomManage", this.loomManage);
     
     //set up initial render and app modes
     this.directories.forEach(d => {

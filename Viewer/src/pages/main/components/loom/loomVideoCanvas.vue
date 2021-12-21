@@ -142,13 +142,12 @@ export default {
     top(){ return this.targetData.top || 0 },
     left(){ return this.targetData.left || 0 },
     parentCanvas(){ return this.$parent.$refs[`loomVideoCanvas-${this.targetData.parentCanvas}`] || false; },
-    currentPolygonPath2D(){ return utils.polyToPath2D(this.currentPolygonMask,0,0); },
     currentPolygonMaskString(){ return utils.polyToPolyString(this.currentPolygonMask,0,0); },
     currentPolygonMaskID(){
       for(let cs = this.current_state; cs && cs.parent_id != cs.id; cs = this.targets[cs.parent_id]){
         if(this.polygonMasks[cs.id]) return cs.id;
       }
-      return 0;
+      return -1;
     },
     currentPolygonMask(){ 
       return this.polygonMasks[this.currentPolygonMaskID];
@@ -313,7 +312,7 @@ export default {
       this.targetData.height += delta.y;
       this.$refs.canvas.width = this.width;
       this.$refs.canvas.height = this.height;
-      utils.scalePolygon(this.polygonMasks[this.currentPolygonMaskID], scale);
+      utils.scalePolygon(this.currentPolygonMask, scale);
       this.redraw();
     },
 
@@ -501,10 +500,6 @@ export default {
       this.ctx.save();
       this.ctx.fillStyle = "rgba(0, 0, 0, 0)";
       this.ctx.clearRect(0, 0, this.width, this.height);
-
-      /* if(this.currentPolygonMask){
-        this.ctx.clip(this.currentPolygonPath2D);
-      } */
       
       if(this.targetData.drawImage !== false){
         const xVideoRatio = videoPlayer.videoWidth/videoPlayer.clientWidth;
@@ -588,9 +583,9 @@ export default {
       this.changeState(this.current_state.id, 0, false);
 
       if(this.targetData.region){
-        this.polygonMasks[this.current_state.id] = this.targetData.region;
+        this.polygonMasks[this.currentPolygonMaskID] = this.targetData.region;
       } else {
-        this.polygonMasks[this.current_state.id] = [
+        this.polygonMasks[this.currentPolygonMaskID] = [
           {x: 0, y: 0},
           {x: this.width, y: 0},
           {x: this.width, y: this.height},
@@ -599,7 +594,7 @@ export default {
       }
 
       if(this.targetData.makeCutout && this.parentCanvas){
-        const region = this.polygonMasks[this.current_state.id];
+        const region = this.currentPolygonMask;
 
         const minX = Math.min(...region.map(p => p.x));
         const maxX = Math.max(...region.map(p => p.x));
