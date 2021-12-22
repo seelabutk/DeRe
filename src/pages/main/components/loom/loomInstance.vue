@@ -23,6 +23,7 @@
         height: config ? config.info.window.height + 'px' : '0px',
       }"
       class="video-js" 
+      crossorigin="anonymous"
       style="position: absolute; top: 0px; left: 0px; visibility: hidden;"
     />
     <loom-video-canvas

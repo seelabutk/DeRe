@@ -16,8 +16,10 @@ export default {
     loomManager,
   },
   data: function(){
+    const baseURL = 'https://raw.githubusercontent.com/branson2015/DeRe_Apps/main';
+    const apps = ['tableau', 'nytimes', 'median_household_income_2018', 'median_household_income_2019'];
     return {
-      directories: ['/apps/tableau', '/apps/nytimes', '/apps/2', '/apps/3'],
+      directories: apps.map(app => `${baseURL}/${app}/`),
     };
   },
 }

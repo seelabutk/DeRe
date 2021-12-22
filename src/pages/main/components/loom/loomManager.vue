@@ -503,8 +503,7 @@ export default {
     
     //set up initial render and app modes
     this.directories.forEach(d => {
-      let appName = d.split('/');
-      appName = appName[appName.length-1];
+      const appName = d.split('/').filter(t => t != '').slice(-1)[0];
       this.appModes.push({
         directory: d,
         label: appName.charAt(0).toUpperCase() + appName.slice(1),
