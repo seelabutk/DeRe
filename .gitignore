@@ -3,7 +3,5 @@ node_modules
 dist
 dist-ssr
 *.local
-Recorder/images/
-Recorder/video.mp4
 build
 
