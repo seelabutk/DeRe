@@ -93,7 +93,7 @@ export default {
       }));
     },
     async getMapping(){
-      this.emitter.emit('loomManage', {'regionSelect': false});
+      this.$parent.$parent.$parent.regionSelect.value = false;
       return await this.$nextTick(() => {
         const linkFroms = Object.entries(this.getRelativeStateCenters()).map(([state, loc]) => {
           const els = document.elementsFromPoint(...Object.values(loc));
@@ -101,7 +101,7 @@ export default {
           if(el === undefined)  return null;
           const id = el.id;
           
-          const component = this.$parent.$parent.$parent.activeComponents[id];
+          const component = this.$parent.$parent.$parent.activeComponents.value[id];
           if(component === undefined || !component.isLoomComponent) return null;
           return {
             mode: component.renderMode,
@@ -111,7 +111,7 @@ export default {
             frame: component.frame,
           };
         }).filter(ld => ld != null);
-        this.emitter.emit('loomManage', {'regionSelect': true});
+        this.$parent.$parent.$parent.regionSelect.value = true;
         return linkFroms;
       });
     }

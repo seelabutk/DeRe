@@ -11,7 +11,7 @@
 
       <span class="text">Mode</span>
       <multiselect
-        ref="renderMode" 
+        ref="renderModeRef" 
         v-model="renderMode"
         mode="single"
         :canDeselect="false"
@@ -22,19 +22,18 @@
 
       <span class="text">App</span>
       <multiselect 
-        ref="appMode"
+        ref="appModeRef"
         v-model="appMode" 
         mode="tags" 
         :options="appModes"
         :searchable="true"
         :createTag="true"
-        @tag="addNewMode"
         @change="onAppModeChange"
       />
 
       <span class="text">Regions:</span>
       <input 
-        ref="regionToggle"
+        ref="regionToggleRef"
         @click="toggleRegion"
         type="checkbox"
         class="sidebar-toggle apple-switch btn btn-default"
@@ -45,7 +44,7 @@
         <div style="grid-area: selectMode">
           <span class="text">Region Edit</span>
           <input
-            ref="SelectMode"
+            ref="selectModeRef"
             @click="()=>dragMode=!dragMode"
             type="checkbox"
             class="sidebar-toggle apple-switch btn btn-default"
@@ -110,7 +109,7 @@
 
       <span class="text">Hints:</span>
       <input 
-        ref="helpToggle"
+        ref="helpToggleRef"
         @click="toggleHintHelp"
         type="checkbox"
         class="sidebar-toggle apple-switch btn btn-default"
@@ -122,7 +121,7 @@
         v-for="(app, key) in appModes"
         :key="String(key)"
         :id="app.value"
-        :ref="app.value"
+        :ref="el => { if(el) appRefs[app.value] = el }"
         :name="app.value"
         :directory="app.directory"
         :videoTargetCache="appConfig"
@@ -141,132 +140,98 @@ import Multiselect from '@vueform/multiselect'
 import loomInstance from './loomInstance.vue'
 import DSet from './utils/disjointset.js'
 import utils from './utils/utils.js'
-
-// make "children" flat array, not weird empty object keyed on id
-// z-index adjuster
-
-// auto-generate app based on user interaction
-// create api for auto generating apps
-
+import { ref, reactive, onMounted, computed, inject, nextTick } from 'vue'
 
 export default {
+  components: { loomInstance,  Multiselect },
+  props: ['directories'],
+  
+  setup(props){
+    //data
+    const regionExists = ref(false);
+    const activeComponents = ref([]);
+    const pasteBin = ref(null);
+    const currVideoCanvasSelected = ref(null);
+    const current_state = ref(null);
+    const appConfig = ref({});
+    const hintHelpState = ref(false);
+    const regionSelect = ref(false);
+    const regionOrigin = ref(null);
+    const dragMode = ref(true);
+    const loomMenuWidth = ref(120);
+    const mapLinkData = reactive({
+      mapLinkMode: 'selectable',
+      firstLink: null,
+      mapComponent: null,
+    });
+    const linkData = reactive({
+      linkMode: 'selectable',
+      firstLink: null,
+      linkedCanvases: new DSet(),
+    });
+    const appModes = reactive([]);
+    const renderModes = reactive([]);
+    const appMode = ref(null);
+    const renderMode = ref(null);
 
-  components: {
-    loomInstance, 
-    Multiselect
-  },
-  props: {
-    directories: {
-      type: Array,
-    },
-  },
-
-  data: function(){
-    return {
-      //modes
-      appModes: [],
-      renderModes: [],
-      
-      //state
-      appMode: null,
-      renderMode: null,
-      
-      regionSelect: false,
-      hintHelpState: false,
-      dragMode: true,
-      regionExists: false,
-      regionOrigin: null,
-      currVideoCanvasSelected: null,
-      pasteBin: null,
-      linkData: {
-        linkMode: 'selectable',
-        firstLink: null,
-        linkedCanvases: new DSet(),
-      },
-      mapLinkData: {
-        mapLinkMode: 'selectable',
-        firstLink: null,
-        mapComponent: null,
-      },
-      appConfig: {},
-      //settings
-      loomMenuWidth: 120,
-
-      //components
-      activeComponents: [],
-    };
-  },
-
-  computed: {
-    loomMenuStyle: function(){
+    //computed
+    const loomMenuStyle = computed(() => ({
+      position: 'absolute',
+      width: loomMenuWidth.value,
+      height: 'auto',
+      top: '150px',
+      left: '0px',
+    }));
+    const mapLinkStyle = computed(() => {
+      const cmap = {'selectable': 'white', 'linkingFrom': 'green', 'linkingTo': 'red'};
       return {
-        position: 'absolute',
-        width: this.loomMenuWidth,
-        height: 'auto',
-        top: '150px',
-        left: '0px',
+        cursor: 'pointer',
+        color: cmap[mapLinkData.mapLinkMode],
       };
-    },
+    });
+    const linkVideoCanvasStyle = computed(() => {
+      return {
+        'none': {
+          color: 'grey',
+          cursor: 'default',
+        },
+        'selectable': {
+          color: 'white',
+          cursor: 'pointer',
+        },
+        'linkingFrom': {
+          color: 'green',
+          cursor: 'pointer',
+        },
+        'linkingTo': {
+          color: 'red',
+          cursor: 'pointer',
+        },
+      }[linkData.linkMode];
+    });
 
-    mapLinkStyle: function(){
-      const style = {cursor: 'pointer'};
-      switch(this.mapLinkData.mapLinkMode){
-        case 'selectable':
-          style.color = 'white';
-          break;
-        case 'linkingFrom':
-          style.color = 'green';
-          break;
-        case 'linkingTo': 
-          style.color = 'red';
-          break;
-      }
-      return style;
-    },
+    //refs
+    const appModeRef = ref(null);
+    const renderModeRef = ref(null);
+    const regionToggleRef = ref(null)
+    const helpToggleRef = ref(null);
+    const selectModeRef = ref(null);
+    const appRefs = reactive({});
 
-    linkVideoCanvasStyle: function(){
-      switch(this.linkData.linkMode){
-        case 'none':
-          return {
-            color: 'grey',
-            cursor: 'default',
-          };
-        case 'selectable':
-          return {
-            color: 'white',
-            cursor: 'pointer',
-          };
-        case 'linkingFrom':
-          return {
-            color: 'green',
-            cursor: 'pointer',
-          };
-        case 'linkingTo':
-          return {
-            color: 'red',
-            cursor: 'pointer',
-          }
-      }
-    },
-
-  },
-
-  methods: {
-    init(){
-      const apps = this.appModes.map(am => ({selected: this.appMode.includes(am.value), ...am})).slice(0,this.directories.length);
-      apps.forEach((app,i) => {
-        const renderApp = {...app, renderMode: this.renderMode};
-        if(this.$refs[app.value]){
-          this.$refs[app.value].init(renderApp);
+    //methods
+    const init = () => {
+      const apps = appModes.map(am => ({selected: appMode.value.includes(am.value), ...am})).slice(0, props.directories.length);
+      apps.forEach(app => {
+        const renderApp = {...app, renderMode: renderMode.value};
+        if(appRefs.hasOwnProperty(app.value)){
+          appRefs[app.value].init(renderApp);
         }
       });
-    },
-
-    async addMap(){
+    };
+    const addMap = async() => {
       const width = 100;
       const height = 100;
-
-      return await this.newVideoTarget({
+      return await newVideoTarget({
         reshapeable: false,
         resizeable: true,
         region: utils.rectToPoly({x: 0, y: 0, width, height, }),
@@ -284,72 +249,61 @@ export default {
         drawImage: false,
         current_state_id: '0',
       }, undefined, false);
-    },
-
-    async newVideoTarget(obj=null, mode=undefined, clear=true){
-      if(this.$refs[this.currVideoCanvasSelected.instanceID]){
-        return await this.$refs[this.currVideoCanvasSelected.instanceID].newVideoTarget(obj, mode, clear);
+    };
+    const newVideoTarget = async (obj=null, mode=undefined, clear=true) => {
+      if(appRefs[currVideoCanvasSelected.value.instanceID]) {
+        return await appRefs[currVideoCanvasSelected.value.instanceID].newVideoTarget(obj, mode, clear);
       }
-    },
-
-    cutRegion(){
-      this.dragMode = true;
-      this.$refs.SelectMode.checked = false;
-      this.regionOrigin.cutSelectedRegion();
-    },
-
-    toggleRegion(e){
-      this.regionSelect = !this.regionSelect;
-      this.$refs.helpToggle.checked = false;
-      this.hintHelpState = false;
-      this.$refs.SelectMode.checked = false;
-      this.dragMode = true;
-    },
-
-    toggleHintHelp(){
-      this.hintHelpState = !this.hintHelpState;
-      this.$refs.regionToggle.checked = false;
-      this.regionSelect = false;
-    },
-
-    onRenderModeChange(v){
-      this.renderMode = v;
-      this.init();
-    },
-
-    onAppModeChange(v){
-      this.appMode = v;
-      this.init();
-    },
-
-    saveVideoCanvasState(){
+    };
+    const cutRegion = () => {
+      dragMode.value = true;
+      selectModeRef.value.checked = false;
+      regionOrigin.value.cutSelectedRegion();
+    };
+    const toggleRegion = () => {
+      regionSelect.value = !regionSelect.value;
+      helpToggleRef.value.checked = false;
+      hintHelpState.value = false;
+      selectModeRef.value.checked = false;
+      dragMode.value = true;
+    };
+    const toggleHintHelp = () => {
+      hintHelpState.value = !hintHelpState.value;
+      regionToggleRef.value.checked = false;
+      regionSelect.value = false;
+    };
+    const onRenderModeChange = (v) => {
+      renderMode.value = v;
+      init();
+    };
+    const onAppModeChange = (v) => {
+      appMode.value = v;
+      init();
+    };
+    const saveVideoCanvasState = () => {
       const name = prompt("Enter name to save config as:");
       if(name == null || name == "")  return;
-
       const saveNames = JSON.parse(localStorage.getItem('saveNames')) || [];
       if(saveNames.some(n => n == name)){
         prompt("Name already taken");
         return;
       }
       saveNames.push(name);
-      
-      this.appConfig['startState'] = {
-        appMode: this.appMode,
-        current_state: this.current_state,
+      appConfig.value['startState'] = {
+        appMode: appMode.value,
+        current_state: current_state.value,
       };
-
       try{
         localStorage.setItem('saveNames', JSON.stringify(saveNames));
-        localStorage.setItem(name, JSON.stringify(this.appConfig));
+        localStorage.setItem(name, JSON.stringify(appConfig.value));
         //todo: offer file download
       } catch (err) {
         alert(`Could not save to localStorage: ${String(err)}`);
         console.error(err);
         //todo: offer file download
       }
-    },
-
-    loadVideoCanvasState(){
+    };
+    const loadVideoCanvasState = () => {
       let loadOptions = localStorage.getItem('saveNames');
       if(!loadOptions){
         alert("No files to load");
@@ -362,61 +316,50 @@ export default {
         alert("File does not exist");
         return;
       }
-
-      this.appConfig = JSON.parse(localStorage.getItem(loadName));
-  
-      this.current_state = this.appConfig['startState']['current_state'];
-      this.appMode = this.appConfig['startState']['appMode'];
-      delete this.appConfig['startState'];
-      
-      this.init();
-    },
-
-    async mapLinkClicked(){
-      if(this.mapLinkData.mapLinkMode == 'selectable'){
-        this.mapLinkData.mapComponent = (await this.addMap()).$refs['target0'];
-        this.mapLinkData.mapLinkMode = 'linkingFrom';
-      } else if(this.mapLinkData.mapLinkMode == 'linkingFrom'){
-        this.mapLinkData.firstLink = await this.mapLinkData.mapComponent.getMapping();
-        console.log(this.mapLinkData.firstLink);
-        this.mapLinkData.mapLinkMode = 'linkingTo';
-      } else if(this.mapLinkData.mapLinkMode == 'linkingTo'){
-        const lds = this.mapLinkData.mapComponent.getMapping();
-        const fls = this.mapLinkData.firstLink;
+      appConfig.value = JSON.parse(localStorage.getItem(loadName));
+      current_state.value = appConfig.value['startState']['current_state'];
+      appMode.value = appConfig.value['startState']['appMode'];
+      delete appConfig.value['startState'];
+      init();
+    };
+    const mapLinkClicked = async () => {
+      if(mapLinkData.mapLinkMode == 'selectable'){
+        mapLinkData.mapComponent = (await addMap()).$refs['target0'];
+        mapLinkData.mapLinkMode = 'linkingFrom';
+      } else if(mapLinkData.mapLinkMode == 'linkingFrom'){
+        mapLinkData.firstLink = await mapLinkData.mapComponent.getMapping();
+        mapLinkData.mapLinkMode = 'linkingTo';
+      } else if(mapLinkData.mapLinkMode == 'linkingTo'){
+        const lds = mapLinkData.mapComponent.getMapping();
+        const fls = mapLinkData.firstLink;
         Object.keys(lds).forEach(key => {
           if(fls.hasOwnProperty(key)){
-            this.createLink(fls[key], lds[key]);
+            createLink(fls[key], lds[key]);
           }
         });
-        this.mapLinkData.mapLinkMode = 'selectable';
+        mapLinkData.mapLinkMode = 'selectable';
       }
-    },
-
-    videoCanvasClicked(){
-      if(this.linkData.linkMode === 'linkingFrom') {
-        this.linkData.firstLink = this.createLinkEntry(this.currVideoCanvasSelected);
-        this.linkData.linkMode = 'linkingTo';
+    };
+    const videoCanvasClicked = () => {
+      if(linkData.linkMode === 'linkingFrom') {
+        linkData.firstLink = createLinkEntry(currVideoCanvasSelected.value);
+        linkData.linkMode = 'linkingTo';
       }
-      else if(this.linkData.linkMode === 'linkingTo'){
-        const ld = this.createLinkEntry(this.currVideoCanvasSelected);
-        this.createLink(this.linkData.firstLink, ld);
-        this.linkData.linkMode = 'selectable';
+      else if(linkData.linkMode === 'linkingTo'){
+        const ld = createLinkEntry(currVideoCanvasSelected.value);
+        createLink(linkData.firstLink, ld);
+        linkData.linkMode = 'selectable';
       }
-    },
-
-    createLinkEntry(vc){
-      return {
-        mode: vc.renderMode,
-        instance: vc.instanceID,
-        page: vc.page,
-        vcid: vc.id,
-        frame: vc.lastFrame
-      }
-    },
-
-    createLink(fl, ld){
+    };
+    const createLinkEntry = (vc) => ({
+      mode: vc.renderMode.value,
+      instance: vc.instanceID,
+      page: vc.page,
+      vcid: vc.id,
+      frame: vc.lastFrame
+    });
+    const createLink = (fl, ld) => {
       let linkFromName, linkToName;
-
       if(fl.instance === ld.instance){//instance linking - all frames linked
         linkToName = `${fl.instance}_${fl.page}_${fl.vcid}_all`;
         linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_all`;
@@ -424,105 +367,133 @@ export default {
         linkToName = `${fl.instance}_${fl.page}_${fl.vcid}_${fl.frame}`;
         linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_${ld.frame}`;
       }
-
-      if(!this.linkData.linkedCanvases.exists(linkToName))    this.linkData.linkedCanvases.add(linkToName, fl);
-      if(!this.linkData.linkedCanvases.exists(linkFromName))  this.linkData.linkedCanvases.add(linkFromName, ld);
-      this.linkData.linkedCanvases.merge(linkToName, linkFromName);  
-      this.$refs[this.currVideoCanvasSelected.instanceID].addInstanceLink(fl, ld);
-      this.linkData.firstLink = null;
-    },
-
-    changeVideoFrame(instance, page, vcid, frame, emit){
-      if(this.linkData.linkedCanvases.exists(`${instance}_${page}_${vcid}_${frame}`)){ //per-frame links
-        this.linkData.linkedCanvases.of(`${instance}_${page}_${vcid}_${frame}`).forEach(d => {
-          this.$refs[d.instance].changeVideoFrame(d.page, d.vcid, d.frame, emit);
+      if(!linkData.linkedCanvases.exists(linkToName))    linkData.linkedCanvases.add(linkToName, fl);
+      if(!linkData.linkedCanvases.exists(linkFromName))  linkData.linkedCanvases.add(linkFromName, ld);
+      linkData.linkedCanvases.merge(linkToName, linkFromName);  
+      videoCanvasSelectedRef.value.addInstanceLink(fl, ld);
+      linkData.firstLink = null;
+    };
+    const changeVideoFrame = (instance, page, vcid, frame, emit) => {
+      if(linkData.linkedCanvases.exists(`${instance}_${page}_${vcid}_${frame}`)){ //per-frame links
+        linkData.linkedCanvases.of(`${instance}_${page}_${vcid}_${frame}`).forEach(d => {
+          appRefs[d.instance].changeVideoFrame(d.page, d.vcid, d.frame, emit);
         });
-      } else if(this.linkData.linkedCanvases.exists(`${instance}_${page}_${vcid}_all`)){ //instance links (all frames linked) 
-        this.linkData.linkedCanvases.of(`${instance}_${page}_${vcid}_all`).forEach(d => {
-          if(this.$refs[d.instance] && d.instance === instance){
-            this.$refs[d.instance].changeVideoFrame(d.page, d.vcid, frame, emit);
+      } else if(linkData.linkedCanvases.exists(`${instance}_${page}_${vcid}_all`)){ //instance links (all frames linked) 
+        linkData.linkedCanvases.of(`${instance}_${page}_${vcid}_all`).forEach(d => {
+          if(appRefs[d.instance] && d.instance === instance){
+            appRefs[d.instance].changeVideoFrame(d.page, d.vcid, frame, emit);
           }
         });
       } else { //no link, just update current instance's vcid's frame
-        if(this.$refs[instance]){
-          this.$refs[instance].changeVideoFrame(page, vcid, frame, emit);
+        if(appRefs[instance]){
+          appRefs[instance].changeVideoFrame(page, vcid, frame, emit);
         }
       }
-    },
-
-    addNewMode(mode){
-      console.log('mode: ', mode);
-      console.log('TODO'); // TODO;
-    },
-
-    Delete(){
-      if(this.$refs[this.currVideoCanvasSelected.instanceID]){
-        this.$refs[this.currVideoCanvasSelected.instanceID].Delete(this.currVideoCanvasSelected);
-      }
-    },
-    copy(){
-      this.pasteBin = this.currVideoCanvasSelected;
-    },
-    cut(){
-      this.copy();
-      this.Delete();
-    },
-    duplicate(){
-      const pasteBin = this.pasteBin;
-      this.copy();
-      this.paste();
-      this.pasteBin = pasteBin;
-    },
-    paste(){
-      if(this.$refs[this.pasteBin.instanceID]){
-        const targetData = utils.deepCopy(this.pasteBin.targetData);
+    };
+    const Delete = () => { if(appRefs[currVideoCanvasSelected.value.instanceID]) appRefs[currVideoCanvasSelected.value.instanceID].Delete(currVideoCanvasSelected.value); };
+    const copy = () => { pasteBin.value = currVideoCanvasSelected.value; };
+    const cut = () => { copy(); Delete(); };
+    const duplicate = () => { const pasteBinCopy = pasteBin.value; copy(); paste(); pasteBin.value = pasteBinCopy; };
+    const paste = () => {
+      if(appRefs[pasteBin.value.instanceID]){
+        const targetData = utils.deepCopy(pasteBin.value.targetData);
         targetData.makeCutout = false;
-        this.$refs[this.pasteBin.instanceID].paste(targetData);
+        appRefs[pasteBin.value.instanceID].paste(targetData);
       }
-    },
+    };
+    const addComponent = ([name, component]) => { activeComponents.value[name] = component };
+    const removeComponent = (name) => { delete activeComponents[name]; };
 
-    loomManage(m){ Object.keys(m).forEach(k => { this[k] =  m[k]}); },
-    addComponent([name, component]){ this.activeComponents[name] = component },
-    removeComponent(name){ delete this.activeComponents[name]; },
-  },
 
-  mounted(){
-    window.app = this;
-    //set up events
-    //todo: unbind mounted events (not really necessary since app closes when unmount occurs)
-    this.emitter.on("regionExists", e => {
-      this.regionExists = e.exists;
-      this.regionOrigin = e.origin;
-    });
-    this.emitter.on("clickVideoCanvas", this.videoCanvasClicked);
-    this.emitter.on("selectVideoCanvas", vc => this.currVideoCanvasSelected = vc );
-    this.emitter.on('changeVideoFrame', t => this.changeVideoFrame(...t));
-    this.emitter.on('addComponent', this.addComponent);
-    this.emitter.on('removeComponet', this.removeComponent);
-    this.emitter.on("loomManage", this.loomManage);
-    
-    //set up initial render and app modes
-    this.directories.forEach(d => {
-      const appName = d.split('/').filter(t => t != '').slice(-1)[0];
-      this.appModes.push({
-        directory: d,
-        label: appName.charAt(0).toUpperCase() + appName.slice(1),
-        value: appName,
+    onMounted(() => {
+      const emitter = inject("emitter");
+      emitter.on("regionExists", e => {
+        regionExists.value = e.exists;
+        regionOrigin.value = e.origin;
       });
+      emitter.on("clickVideoCanvas", videoCanvasClicked);
+      emitter.on("selectVideoCanvas", vc => currVideoCanvasSelected.value = vc );
+      emitter.on('changeVideoFrame', t => changeVideoFrame(...t));
+      emitter.on('addComponent', addComponent);
+      emitter.on('removeComponet', removeComponent);
+      //set up initial render and app modes
+      props.directories.forEach(d => {
+        const appName = d.split('/').filter(t => t != '').slice(-1)[0];
+        appModes.push({
+          directory: d,
+          label: appName.charAt(0).toUpperCase() + appName.slice(1),
+          value: appName,
+        });
+      });
+      appMode.value = appModes[0];
+      appModeRef.value.select(appMode.value);
+      ['Desktop', 'Mobile'].forEach(d => renderModes.push({
+        value: d.toLowerCase(), 
+        label: d,
+      }));
+      renderMode.value = renderModes[0].value;
+      renderModeRef.value.select(renderMode.value); 
+      nextTick(init);
     });
-    this.appMode = this.appModes[0];
-    this.$refs.appMode.select(this.appMode);
-    
-    ['Desktop', 'Mobile'].forEach(d => this.renderModes.push({
-      value: d.toLowerCase(), 
-      label: d,
-    }));
-    this.renderMode = this.renderModes[0].value;
-    this.$refs.renderMode.select(this.renderMode); 
-    
-    this.$nextTick(this.init);
-  }
 
+    return {
+      //modes
+      appModes,
+      renderModes,
+      //state
+      appMode,
+      renderMode,
+      //
+      regionSelect,
+      hintHelpState,
+      dragMode,
+      regionExists,
+      regionOrigin,
+      currVideoCanvasSelected,
+      pasteBin,
+      linkData,
+      mapLinkData,
+      appConfig,
+      current_state,
+      loomMenuWidth,
+      activeComponents,
+      //computed
+      loomMenuStyle,
+      mapLinkStyle,
+      linkVideoCanvasStyle,
+      //methods
+      init,
+      addMap,
+      newVideoTarget,
+      cutRegion,
+      toggleRegion,
+      toggleHintHelp,
+      onRenderModeChange,
+      onAppModeChange,
+      saveVideoCanvasState,
+      loadVideoCanvasState,
+      mapLinkClicked,
+      videoCanvasClicked,
+      createLinkEntry,
+      createLink,
+      changeVideoFrame,
+      Delete,
+      copy,
+      cut,
+      duplicate,
+      paste,
+      addComponent,
+      removeComponent,
+
+      //refs
+      appModeRef,
+      renderModeRef,
+      regionToggleRef,
+      helpToggleRef,
+      selectModeRef,
+      appRefs,
+    };
+  }
 }
 </script>
 

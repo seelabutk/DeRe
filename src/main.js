@@ -10,5 +10,6 @@ library.add(faCopy, faTrash, faPlusSquare, faCut, faPaste, faBorderNone, faSave,
 const emitter = mitt();
 const app = createApp(App);
 app.config.globalProperties.emitter = emitter;
+app.provide('emitter', emitter);
 app.component('font-awesome-icon', FontAwesomeIcon);
 app.mount('#app');
