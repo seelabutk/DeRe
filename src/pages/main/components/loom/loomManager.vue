@@ -1,7 +1,13 @@
 <template>
   <div>
 
-    <div id="loom-menu" :style="loomMenuStyle">
+    <div id="loom-menu" :style="{
+      position: 'absolute',
+      width: loomMenuWidth,
+      height: 'auto',
+      top: '150px',
+      left: '0px',
+    }">
       <span class="title">Loom</span>
 
       <div>
@@ -147,119 +153,17 @@ export default {
   props: ['directories'],
   
   setup(props){
-    //data
-    const regionExists = ref(false);
-    const activeComponents = ref([]);
-    const pasteBin = ref(null);
-    const currVideoCanvasSelected = ref(null);
-    const current_state = ref(null);
-    const appConfig = ref({});
-    const hintHelpState = ref(false);
-    const regionSelect = ref(false);
-    const regionOrigin = ref(null);
-    const dragMode = ref(true);
-    const loomMenuWidth = ref(120);
-    const mapLinkData = reactive({
-      mapLinkMode: 'selectable',
-      firstLink: null,
-      mapComponent: null,
-    });
-    const linkData = reactive({
-      linkMode: 'selectable',
-      firstLink: null,
-      linkedCanvases: new DSet(),
-    });
-    const appModes = reactive([]);
-    const renderModes = reactive([]);
-    const appMode = ref(null);
-    const renderMode = ref(null);
-
-    //computed
-    const loomMenuStyle = computed(() => ({
-      position: 'absolute',
-      width: loomMenuWidth.value,
-      height: 'auto',
-      top: '150px',
-      left: '0px',
-    }));
-    const mapLinkStyle = computed(() => {
-      const cmap = {'selectable': 'white', 'linkingFrom': 'green', 'linkingTo': 'red'};
-      return {
-        cursor: 'pointer',
-        color: cmap[mapLinkData.mapLinkMode],
-      };
-    });
-    const linkVideoCanvasStyle = computed(() => {
-      return {
-        'none': {
-          color: 'grey',
-          cursor: 'default',
-        },
-        'selectable': {
-          color: 'white',
-          cursor: 'pointer',
-        },
-        'linkingFrom': {
-          color: 'green',
-          cursor: 'pointer',
-        },
-        'linkingTo': {
-          color: 'red',
-          cursor: 'pointer',
-        },
-      }[linkData.linkMode];
-    });
-
-    //refs
-    const appModeRef = ref(null);
-    const renderModeRef = ref(null);
-    const regionToggleRef = ref(null)
-    const helpToggleRef = ref(null);
+    /*******Loom Menu********/
     const selectModeRef = ref(null);
-    const appRefs = reactive({});
-
-    //methods
-    const init = () => {
-      const apps = appModes.map(am => ({selected: appMode.value.includes(am.value), ...am})).slice(0, props.directories.length);
-      apps.forEach(app => {
-        const renderApp = {...app, renderMode: renderMode.value};
-        if(appRefs.hasOwnProperty(app.value)){
-          appRefs[app.value].init(renderApp);
-        }
-      });
-    };
-    const addMap = async() => {
-      const width = 100;
-      const height = 100;
-      return await newVideoTarget({
-        reshapeable: false,
-        resizeable: true,
-        region: utils.rectToPoly({x: 0, y: 0, width, height, }),
-        width,
-        height,
-        targets: [{
-          actor: 'USA',
-          id: '0',
-          important: true,  
-        }],
-        startupFn: c => {
-          c.lastFrame = 0;
-          delete c.targetData.startupFn;
-        },
-        drawImage: false,
-        current_state_id: '0',
-      }, undefined, false);
-    };
-    const newVideoTarget = async (obj=null, mode=undefined, clear=true) => {
-      if(appRefs[currVideoCanvasSelected.value.instanceID]) {
-        return await appRefs[currVideoCanvasSelected.value.instanceID].newVideoTarget(obj, mode, clear);
-      }
-    };
-    const cutRegion = () => {
-      dragMode.value = true;
-      selectModeRef.value.checked = false;
-      regionOrigin.value.cutSelectedRegion();
-    };
+    const helpToggleRef = ref(null);
+    const hintHelpState = ref(false);
+    const regionToggleRef = ref(null);
+    const loomMenuWidth = ref(120);
+    const regionSelect = ref(false);
+    const dragMode = ref(true);
+    const regionExists = ref(false);
+    const regionOrigin = ref(null);
+    const pasteBin = ref(null);  
     const toggleRegion = () => {
       regionSelect.value = !regionSelect.value;
       helpToggleRef.value.checked = false;
@@ -280,6 +184,20 @@ export default {
       appMode.value = v;
       init();
     };
+    const Delete = () => { if(appRefs[currVideoCanvasSelected.value.instanceID]) appRefs[currVideoCanvasSelected.value.instanceID].Delete(currVideoCanvasSelected.value); };
+    const copy = () => { pasteBin.value = currVideoCanvasSelected.value; };
+    const cut = () => { copy(); Delete(); };
+    const duplicate = () => { const pasteBinCopy = pasteBin.value; copy(); paste(); pasteBin.value = pasteBinCopy; };
+    const paste = () => {
+      if(appRefs[pasteBin.value.instanceID]){
+        const targetData = utils.deepCopy(pasteBin.value.targetData);
+        targetData.makeCutout = false;
+        appRefs[pasteBin.value.instanceID].paste(targetData);
+      }
+    };
+
+
+    /*****Saving/Loading*******/
     const saveVideoCanvasState = () => {
       const name = prompt("Enter name to save config as:");
       if(name == null || name == "")  return;
@@ -322,24 +240,16 @@ export default {
       delete appConfig.value['startState'];
       init();
     };
-    const mapLinkClicked = async () => {
-      if(mapLinkData.mapLinkMode == 'selectable'){
-        mapLinkData.mapComponent = (await addMap()).$refs['target0'];
-        mapLinkData.mapLinkMode = 'linkingFrom';
-      } else if(mapLinkData.mapLinkMode == 'linkingFrom'){
-        mapLinkData.firstLink = await mapLinkData.mapComponent.getMapping();
-        mapLinkData.mapLinkMode = 'linkingTo';
-      } else if(mapLinkData.mapLinkMode == 'linkingTo'){
-        const lds = mapLinkData.mapComponent.getMapping();
-        const fls = mapLinkData.firstLink;
-        Object.keys(lds).forEach(key => {
-          if(fls.hasOwnProperty(key)){
-            createLink(fls[key], lds[key]);
-          }
-        });
-        mapLinkData.mapLinkMode = 'selectable';
-      }
-    };
+
+
+    /*********Components*********/
+    const activeComponents = ref([]);
+    const addComponent = ([name, component]) => { activeComponents.value[name] = component };
+    const removeComponent = (name) => { delete activeComponents[name]; };
+
+
+    /*********Video Canvas*********/
+    const currVideoCanvasSelected = ref(null);
     const videoCanvasClicked = () => {
       if(linkData.linkMode === 'linkingFrom') {
         linkData.firstLink = createLinkEntry(currVideoCanvasSelected.value);
@@ -351,6 +261,41 @@ export default {
         linkData.linkMode = 'selectable';
       }
     };
+    const newVideoTarget = async (obj=null, mode=undefined, clear=true) => {
+      if(appRefs[currVideoCanvasSelected.value.instanceID]) {
+        return await appRefs[currVideoCanvasSelected.value.instanceID].newVideoTarget(obj, mode, clear);
+      }
+    };
+    const cutRegion = () => {
+      dragMode.value = true;
+      selectModeRef.value.checked = false;
+      regionOrigin.value.cutSelectedRegion();
+    };
+    const changeVideoFrame = (instance, page, vcid, frame, emit) => {
+      if(linkData.linkedCanvases.exists(`${instance}_${page}_${vcid}_${frame}`)){ //per-frame links
+        linkData.linkedCanvases.of(`${instance}_${page}_${vcid}_${frame}`).forEach(d => {
+          appRefs[d.instance].changeVideoFrame(d.page, d.vcid, d.frame, emit);
+        });
+      } else if(linkData.linkedCanvases.exists(`${instance}_${page}_${vcid}_all`)){ //instance links (all frames linked) 
+        linkData.linkedCanvases.of(`${instance}_${page}_${vcid}_all`).forEach(d => {
+          if(appRefs[d.instance] && d.instance === instance){
+            appRefs[d.instance].changeVideoFrame(d.page, d.vcid, frame, emit);
+          }
+        });
+      } else { //no link, just update current instance's vcid's frame
+        if(appRefs[instance]){
+          appRefs[instance].changeVideoFrame(page, vcid, frame, emit);
+        }
+      }
+    };
+
+
+    /*******Frame Linking**********/
+    const linkData = reactive({
+      linkMode: 'selectable',
+      firstLink: null,
+      linkedCanvases: new DSet(),
+    });
     const createLinkEntry = (vc) => ({
       mode: vc.renderMode.value,
       instance: vc.instanceID,
@@ -373,38 +318,102 @@ export default {
       videoCanvasSelectedRef.value.addInstanceLink(fl, ld);
       linkData.firstLink = null;
     };
-    const changeVideoFrame = (instance, page, vcid, frame, emit) => {
-      if(linkData.linkedCanvases.exists(`${instance}_${page}_${vcid}_${frame}`)){ //per-frame links
-        linkData.linkedCanvases.of(`${instance}_${page}_${vcid}_${frame}`).forEach(d => {
-          appRefs[d.instance].changeVideoFrame(d.page, d.vcid, d.frame, emit);
-        });
-      } else if(linkData.linkedCanvases.exists(`${instance}_${page}_${vcid}_all`)){ //instance links (all frames linked) 
-        linkData.linkedCanvases.of(`${instance}_${page}_${vcid}_all`).forEach(d => {
-          if(appRefs[d.instance] && d.instance === instance){
-            appRefs[d.instance].changeVideoFrame(d.page, d.vcid, frame, emit);
+    const linkVideoCanvasStyle = computed(() => {
+      return {
+        'none': {
+          color: 'grey',
+          cursor: 'default',
+        },
+        'selectable': {
+          color: 'white',
+          cursor: 'pointer',
+        },
+        'linkingFrom': {
+          color: 'green',
+          cursor: 'pointer',
+        },
+        'linkingTo': {
+          color: 'red',
+          cursor: 'pointer',
+        },
+      }[linkData.linkMode];
+    });
+
+
+    /**********Map Linking**********/
+    const mapLinkData = reactive({
+      mapLinkMode: 'selectable',
+      firstLink: null,
+      mapComponent: null,
+    });
+    const mapLinkClicked = async () => {
+      if(mapLinkData.mapLinkMode == 'selectable'){
+        mapLinkData.mapComponent = (await addMap()).$refs['target0'];
+        mapLinkData.mapLinkMode = 'linkingFrom';
+      } else if(mapLinkData.mapLinkMode == 'linkingFrom'){
+        mapLinkData.firstLink = await mapLinkData.mapComponent.getMapping();
+        mapLinkData.mapLinkMode = 'linkingTo';
+      } else if(mapLinkData.mapLinkMode == 'linkingTo'){
+        const lds = mapLinkData.mapComponent.getMapping();
+        const fls = mapLinkData.firstLink;
+        Object.keys(lds).forEach(key => {
+          if(fls.hasOwnProperty(key)){
+            createLink(fls[key], lds[key]);
           }
         });
-      } else { //no link, just update current instance's vcid's frame
-        if(appRefs[instance]){
-          appRefs[instance].changeVideoFrame(page, vcid, frame, emit);
+        mapLinkData.mapLinkMode = 'selectable';
+      }
+    };
+    const addMap = async() => {
+      const width = 100;
+      const height = 100;
+      return await newVideoTarget({
+        reshapeable: false,
+        resizeable: true,
+        region: utils.rectToPoly({x: 0, y: 0, width, height, }),
+        width,
+        height,
+        targets: [{
+          actor: 'USA',
+          id: '0',
+          important: true,  
+        }],
+        startupFn: c => {
+          c.lastFrame = 0;
+          delete c.targetData.startupFn;
+        },
+        drawImage: false,
+        current_state_id: '0',
+      }, undefined, false);
+    };
+    const mapLinkStyle = computed(() => {
+      const cmap = {'selectable': 'white', 'linkingFrom': 'green', 'linkingTo': 'red'};
+      return {
+        cursor: 'pointer',
+        color: cmap[mapLinkData.mapLinkMode],
+      };
+    });
+    
+
+    /*******Initialization********/
+    const current_state = ref(null);
+    const appModeRef = ref(null);
+    const renderModeRef = ref(null);
+    const appRefs = reactive({});
+    const appModes = reactive([]);
+    const renderModes = reactive([]);
+    const appMode = ref(null);
+    const renderMode = ref(null);
+    const appConfig = ref({});
+    const init = () => {
+      const apps = appModes.map(am => ({selected: appMode.value.includes(am.value), ...am})).slice(0, props.directories.length);
+      apps.forEach(app => {
+        const renderApp = {...app, renderMode: renderMode.value};
+        if(appRefs.hasOwnProperty(app.value)){
+          appRefs[app.value].init(renderApp);
         }
-      }
+      });
     };
-    const Delete = () => { if(appRefs[currVideoCanvasSelected.value.instanceID]) appRefs[currVideoCanvasSelected.value.instanceID].Delete(currVideoCanvasSelected.value); };
-    const copy = () => { pasteBin.value = currVideoCanvasSelected.value; };
-    const cut = () => { copy(); Delete(); };
-    const duplicate = () => { const pasteBinCopy = pasteBin.value; copy(); paste(); pasteBin.value = pasteBinCopy; };
-    const paste = () => {
-      if(appRefs[pasteBin.value.instanceID]){
-        const targetData = utils.deepCopy(pasteBin.value.targetData);
-        targetData.makeCutout = false;
-        appRefs[pasteBin.value.instanceID].paste(targetData);
-      }
-    };
-    const addComponent = ([name, component]) => { activeComponents.value[name] = component };
-    const removeComponent = (name) => { delete activeComponents[name]; };
-
-
     onMounted(() => {
       const emitter = inject("emitter");
       emitter.on("regionExists", e => {
@@ -416,7 +425,6 @@ export default {
       emitter.on('changeVideoFrame', t => changeVideoFrame(...t));
       emitter.on('addComponent', addComponent);
       emitter.on('removeComponet', removeComponent);
-      //set up initial render and app modes
       props.directories.forEach(d => {
         const appName = d.split('/').filter(t => t != '').slice(-1)[0];
         appModes.push({
@@ -443,7 +451,6 @@ export default {
       //state
       appMode,
       renderMode,
-      //
       regionSelect,
       hintHelpState,
       dragMode,
@@ -458,7 +465,6 @@ export default {
       loomMenuWidth,
       activeComponents,
       //computed
-      loomMenuStyle,
       mapLinkStyle,
       linkVideoCanvasStyle,
       //methods
@@ -484,7 +490,6 @@ export default {
       paste,
       addComponent,
       removeComponent,
-
       //refs
       appModeRef,
       renderModeRef,
