@@ -146,7 +146,7 @@ import Multiselect from '@vueform/multiselect'
 import loomInstance from './loomInstance.vue'
 import DSet from './utils/disjointset.js'
 import utils from './utils/utils.js'
-import { ref, reactive, onMounted, computed, inject, nextTick } from 'vue'
+import { ref, reactive, onMounted, computed, inject, nextTick, expose } from 'vue'
 
 export default {
   components: { loomInstance,  Multiselect },
@@ -442,6 +442,10 @@ export default {
       renderMode.value = renderModes[0].value;
       renderModeRef.value.select(renderMode.value); 
       nextTick(init);
+    });
+
+    expoose({
+      appConfig
     });
 
     return {

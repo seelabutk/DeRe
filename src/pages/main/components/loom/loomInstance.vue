@@ -17,7 +17,7 @@
     <video 
       v-for="(val, key) in videoPlayers"
       :key="key"
-      :ref="`videoPlayer${val.id}`"
+      :ref="el => { if(el) videoPlayerRefs[val.id] = el }"
       :style="{
         width:  config ? config.info.window.width  + 'px' : '0px',
         height: config ? config.info.window.height + 'px' : '0px',
@@ -29,7 +29,7 @@
     <loom-video-canvas
       v-for="videoTarget in currentVideoTargets"
       :key="`${renderAppMode}-${videoTarget.page}-${videoTarget.id}`"
-      :ref="`loomVideoCanvas-${videoTarget.id}`"
+      :ref="el => { if(el) loomVideoCanvasRefs[videoTarget.id] = el }"
       :instanceID="id"
       :targets="videoTarget.targets || targets"
       :targetData="videoTarget"
@@ -46,27 +46,22 @@
   </div>
 </template>
 
+
 <script>
 import videojs from 'video.js'
 import 'video.js/dist/video-js.min.css'
-
 
 import loomConfig from './loomConfig.json'
 import transformMode from './transforms.js'
 import loomVideoCanvas from './loomVideoCanvas.vue'
 import utils from './utils/utils.js'
-import { render } from '@vue/runtime-dom'
+
+import { ref, reactive, getCurrentInstance, onMounted, computed, inject, nextTick } from 'vue'
 
 export default {
   name: 'LoomInstance',
-  components: {
-    loomVideoCanvas
-  },
-
+  components: { loomVideoCanvas },
   props: {
-    directory: {
-      type: String,
-    },
     config_filename: {
       type: String,
       default: 'config.json'
@@ -75,9 +70,7 @@ export default {
       type: String,
       default: 'vtc.json'
     },
-    renderMode: {
-      type: String,
-    },
+    renderMode: String,
     videoTargetCache: {
       type: Object,
       default: {}
@@ -86,62 +79,53 @@ export default {
       type: String,
       default: 'video.mp4'
     },
-    regionSelect: {
-      type: Boolean,
-    }, 
-    overlay: {
-      type: Boolean,
-    }, 
-    dragMode: {
-      type: Boolean,
-    },
-    id: {
-      type: String,
-    },
-    name: {
-      type: String,
-    }
+    directory: String,
+    regionSelect:  Boolean,
+    overlay: Boolean,
+    dragMode: Boolean,
+    id: String,
+    name: String,
   },
+  setup(props){
+    //global
+    const instance = getCurrentInstance();
+    const emitter = inject("emitter");
+    //refs
+    const loomVideoCanvasRefs = reactive({});
+    const videoPlayerRefs = reactive({});
+    //data
+    const transformedTargetCache = reactive({});
+    const interactionHistory = reactive([]);
+    const current_state = ref(null);
+    const renderAppMode = ref(null);
+    const loaded = ref(false);
+    const config = ref(null);
+    const currentConfig = ref(null);
+    const maxHistoryLength = ref(30);
+    const videoPlayers = reactive([]);
+    const lastUsedVideoPlayer = ref(0);
+    const fps = ref(30);
+    const numVideoPlayers = ref(3);
 
-  data: () => ({
-    //state
-    config: null,
-    currentConfig: null,
-    current_state: null,
-    loaded: false,
-    renderAppMode: null,
-    //targets
-    transformedTargetCache: {},
-    //video
-    videoPlayers: [],
-    //history
-    interactionHistory: [],
-    maxHistoryLength: 30,
 
-
-    numVideoPlayers: 3,
-    lastUsedVideoPlayer: 0,
-    fps: 30,
-  }),
-
-  computed: {
-    targets: function(){
-      const originalTargets = utils.shallowCopy(this.transformedTargetCache['original']);
+    //computed
+    const targets = computed(() => {
+      const originalTargets = utils.shallowCopy(transformedTargetCache['original']);
       delete originalTargets.mode;
-      const newTargets = utils.shallowCopy(this.transformedTargetCache[this.renderAppMode] || {});
+      const newTargets = utils.shallowCopy(transformedTargetCache[renderAppMode.value] || {});
       delete newTargets.mode;
       const mergedTargets = utils.deepMerge(originalTargets, newTargets);
       return mergedTargets;
-    },
-    computeCurrentVideoTargets(){
-      if(!this.current_state || !this.videoTargetCache[this.renderAppMode]) return [null, null];
+    });
+    const computeCurrentVideoTargets = computed(() => {
+      if(!current_state.value || !props.videoTargetCache[renderAppMode.value]) return [null, null];
       let vt = null;
       let page = '-1';
       //traverse up parents
-      for(let cs = this.current_state; vt === null && cs && cs.id != cs.parent_id; cs = this.targets[cs.parent_id]){
+      for(let cs = current_state.value; vt === null && cs && cs.id != cs.parent_id; cs = targets.value[cs.parent_id]){
         if(typeof cs.frame_no === "string" && cs.frame_no.includes("frameless")) continue;
         //check if any of our videoTargets is an ancestor of our current state
-        const vts = Object.entries(this.videoTargetCache[this.renderAppMode]);
+        const vts = Object.entries(props.videoTargetCache[renderAppMode.value]);
         for(let i = 0; i < vts.length; ++i){
           if(String(cs.id) === vts[i][0]){
             vt = vts[i][1];
@@ -151,22 +135,21 @@ export default {
         }
       }
       if(vt === null){
-        vt = this.videoTargetCache[this.renderAppMode]['-1'];   //return root
+        vt = props.videoTargetCache[renderAppMode.value]['-1'];   //return root
       }
       return [page, vt];
-    },
-    currentVideoTargets(){ return this.computeCurrentVideoTargets[1]; },
-    currentPage(){ return this.computeCurrentVideoTargets[0]; },
-  },
+    });
+    const currentVideoTargets = computed(() => { return computeCurrentVideoTargets.value[1]; });
+    const currentPage = computed(() => { return computeCurrentVideoTargets.value[0]; });
 
-  methods: {
-    setupVideo(element){
+    //methods
+    const setupVideo = (element) => {
       const p = videojs.getPlayer(element);
       if(p) return p;
 
-      let videoOptions = {
+      const videoOptions = {
         sources: [{
-          src: this.directory + '/' + this.video_filename,
+          src: props.directory + '/' + props.video_filename,
           type: 'video/mp4',
         }],
         controls: false,
@@ -178,64 +161,54 @@ export default {
             ev.preventDefault();
         });
       });
-    },
-
-    load(){
-      if(this.loaded) return Promise.resolve([this.config, this.$parent.appConfig]);
+    };
+    const load = () => {
+      if(loaded.value) return Promise.resolve([config, instance.parent.appConfig]);
+      
       return Promise.all([
-          fetch(this.directory + '/' + this.config_filename).then(res => res.text()).then(config => JSON.parse(config)),
-          fetch(this.directory + '/' + this.vtc_filename)   .then(res => res.text()).then(vtc    => JSON.parse(vtc   )).catch(e => null)
-        ]).then(([config, vtc]) => {
-          if(config.info['version'] != loomConfig['version']){
-            console.error('ERROR, out of version config file, run Recorder/convert.py');
-            return;
-          }
-
-          this.config = config;
-          this.currentConfig = this.config.hasOwnProperty(this.renderAppMode) ? this.config[this.renderAppMode] : this.config['original'];
-          this.loaded = true;
-
-          this.transformedTargetCache['hidden'] = {};
-          this.videoTargetCache['hidden'] = {};
-
-          this.transformedTargetCache['original'] = this.config['original'].data;
-
-          return [config, vtc];
-        });
-    },
-
-    init(m){
-      this.renderAppMode = `${m.value}_${m.renderMode}`;
-      this.load().then(([config, vtc])=>{
-        if(!m.selected){
-          this.renderAppMode = 'hidden';
+        fetch(props.directory + '/' + props.config_filename).then(res => res.text()).then(config => JSON.parse(config)),
+        fetch(props.directory + '/' + props.vtc_filename)   .then(res => res.text()).then(vtc    => JSON.parse(vtc   )).catch(e => null)
+      ]).then(([nconfig, vtc]) => {
+        if(nconfig.info['version'] != loomConfig['version']){
+          console.error('ERROR, out of version config file, run Recorder/convert.py');
+          return;
         }
-        this.targetCacheModeChange(this.renderAppMode, m.renderMode);
-        this.init_videoTargetCache(vtc, m.value, m.renderMode);
-        this.videoCacheModeChange(this.renderAppMode);
-
-        this.current_state = Object.values(this.targets).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[0];
-        this.changeState(this.current_state.id);
+        config.value = nconfig;
+        currentConfig.value = config.value.hasOwnProperty(renderAppMode.value) ? config.value[renderAppMode.value] : config.value['original'];
+        loaded.value = true;
+        transformedTargetCache['hidden'] = {};
+        props.videoTargetCache['hidden'] = {};
+        transformedTargetCache['original'] = config.value['original'].data;
+        return [config, vtc];
       });
-    },
+    };
+    const init = (m) => {
+      renderAppMode.value = `${m.value}_${m.renderMode}`;
+      load().then(([config, vtc])=>{
+        if(!m.selected) renderAppMode.value = 'hidden';
 
-    init_videoTargetCache(cvt_config, renderAppMode, renderMode){
+        targetCacheModeChange(renderAppMode.value, m.renderMode);
+        init_videoTargetCache(vtc, m.value, m.renderMode);
+        videoCacheModeChange(renderAppMode.value);
+
+        current_state.value = Object.values(targets.value).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[0];
+        changeState(current_state.value.id);
+      });
+    };
+    const init_videoTargetCache = (cvt_config, renderAppMode, renderMode) => {
       const rarm = `${renderAppMode}_${renderMode}`
       if(!cvt_config || cvt_config[rarm] === undefined) return;
-
       const vt_config = cvt_config[rarm]
       const val = utils.deepCopy(vt_config);
       for(const page of Object.values(val)){
         for(const vc of Object.values(page)){
           vc.processed = vc.processed === undefined ? Boolean(vc.cutouts && vc.cutouts.length > 0) : vc.processed;
           vc.cutouts = vc.cutouts || [];
-          
           const instance = renderAppMode
           const lfs = vc.linkedFrames || [];
           for(const lf of lfs){
             if(lf.mode != renderMode)
               continue;
-
             const ld = {
               mode: renderMode,
               instance: instance,
@@ -245,34 +218,30 @@ export default {
             if(lf.instance == ld.instance){
               const linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_all`;
               const linkToName   = `${lf.instance}_${lf.page}_${lf.vcid}_all`;
-              if(!this.$parent.linkData.linkedCanvases.exists(linkFromName))  this.$parent.linkData.linkedCanvases.add(linkFromName, ld);
-              if(!this.$parent.linkData.linkedCanvases.exists(linkToName  ))  this.$parent.linkData.linkedCanvases.add(linkToName  , lf);
-              this.$parent.linkData.linkedCanvases.merge(linkFromName, linkToName);
+              if(!instance.parent.linkData.linkedCanvases.exists(linkFromName))  instance.parent.linkData.linkedCanvases.add(linkFromName, ld);
+              if(!instance.parent.linkData.linkedCanvases.exists(linkToName  ))  instance.parent.linkData.linkedCanvases.add(linkToName  , lf);
+              instance.parent.linkData.linkedCanvases.merge(linkFromName, linkToName);
             } else {
               for(const frame of lf.frames){
                 ld.frame = frame[0];
                 lf.frame = frame[1];
                 const linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_${ld.frame}`;
                 const linkToName   = `${lf.instance}_${lf.page}_${lf.vcid}_${lf.frame}`;
-                if(!this.$parent.linkData.linkedCanvases.exists(linkFromName))  this.$parent.linkData.linkedCanvases.add(linkFromName, ld);
-                if(!this.$parent.linkData.linkedCanvases.exists(linkToName  ))  this.$parent.linkData.linkedCanvases.add(linkToName  , lf);
-                this.$parent.linkData.linkedCanvases.merge(linkFromName, linkToName);
+                if(!instance.parent.linkData.linkedCanvases.exists(linkFromName))  instance.parent.linkData.linkedCanvases.add(linkFromName, ld);
+                if(!instance.parent.linkData.linkedCanvases.exists(linkToName  ))  instance.parent.linkData.linkedCanvases.add(linkToName  , lf);
+                instance.parent.linkData.linkedCanvases.merge(linkFromName, linkToName);
               }
             }
           }
-
-
           if(vc.parentCanvas && vc.parentCanvas != '-1'){
-            const pc = this.$refs[`loomVideoCanvas-${vc.parentCanvas}`];
+            const pc = loomVideoCanvasRefs[vc.parentCanvas];
             if(vc.makeCutout && pc){
               pc.targetData.cutouts = vc.parentCanvas.cutouts || [];
-
               const region = vc.region;
               const minX = Math.min(...region.map(p => p.x));
               const maxX = Math.max(...region.map(p => p.x));
               const minY = Math.min(...region.map(p => p.y));
               const maxY = Math.max(...region.map(p => p.y));
-
               const pcutouts = pc.targetData.cutouts;
               pcutouts.push({
                 poly: utils.polyToPolyString(region, 0, 0),
@@ -286,93 +255,62 @@ export default {
           }
         }
       }
-
       for(let key in vt_config){
-        this.videoTargetCache[rarm][key] = vt_config[key];
+        props.videoTargetCache[rarm][key] = vt_config[key];
       }
-    },
-
-    updateInteractionHistory(target, e, videoCanvas){
-      let interaction = {
-        id: target.id,
-        videoCanvas,
-        target,
-        event: e,
-      }
-      this.interactionHistory.push(interaction);
-      if(this.interactionHistory.length > this.maxHistoryLength){
-        this.interactionHistory.shift();
-      }
-      this.emitter.emit("runInteractionAnalysis", this.interactionHistory);
-    },
-
-    addInstanceLink(fl, ld){
-      const fli = this.$parent.$refs[fl.instance].renderAppMode;
-      if(this.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames == undefined)
-        this.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames = [];
-      const linkedFrames = this.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames;
-
+    };
+    const updateInteractionHistory = (target, e, videoCanvas) => {
+      const interaction = { id: target.id, videoCanvas, target, event: e };
+      interactionHistory.push(interaction);
+      if(interactionHistory.length > maxHistoryLength.value)  interactionHistory.shift();
+      emitter.emit("runInteractionAnalysis", interactionHistory);
+    };
+    const addInstanceLink = (fl, ld) => {
+      const fli = instance.parent.appRefs[fl.instance].renderAppMode;
+      if(props.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames == undefined)
+        props.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames = [];
+      const linkedFrames = props.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames;
       const lf = linkedFrames.find(lf => lf.mode == ld.mode && lf.page == ld.page && lf.vcid == ld.vcid);
       if(lf != undefined){
         lf.frames = lf.frames || [];
-        lf.frames.push([fl.frame, ld.frame])
+        lf.frames.push([fl.frame, ld.frame]);
       } else {
-        const cld = {...ld} //shallow copy
+        const cld = {...ld}; //shallow copy
         if(fl.instance != ld.instance){
           delete cld.frame;
           cld.frames = [[fl.frame, ld.frame]];
         }
         linkedFrames.push(cld)
       }
-    },
-    
-    changeState(target_id, offset = 0){
-      const target = this.targets[target_id];
-      if(target === undefined)  {
-        console.error("Invalid state");  
-        return;
-      }
-      this.changeStateWithFrameNo(target.frame_no, offset);
-    }, 
-
-    changeStateWithFrameNo(frame){
-      this.current_state = Object.values(this.targets).find(o => o.frame_no == frame);
-    },
-
-    targetCacheModeChange(mode, transform){
-      if(!this.transformedTargetCache.hasOwnProperty(mode)){
-        if(!this.config.hasOwnProperty(mode)){
-          this.config[mode] = transformMode(this.config, this.transformedTargetCache['original'], transform);
+    };
+    const changeState = (target_id, offset = 0) => {
+      const target = targets.value[target_id];
+      if(target === undefined)  { console.error("Invalid state");   return; }
+      changeStateWithFrameNo(target.frame_no, offset);
+    };
+    const changeStateWithFrameNo = (frame) => { current_state.value = Object.values(targets.value).find(o => o.frame_no == frame); };
+    const targetCacheModeChange = (mode, transform) => {
+      if(!transformedTargetCache.hasOwnProperty(mode)){
+        if(!config.value.hasOwnProperty(mode)){
+          config.value[mode] = transformMode(config.value, transformedTargetCache['original'], transform);
         } 
-        this.transformedTargetCache[mode] = this.config[mode].data || {};
+        transformedTargetCache[mode] = config.value[mode].data || {};
       }
-    },
-    
-    async newVideoTarget(obj={}, mode=undefined, clear=false){
-      if(mode === undefined)  mode = this.renderAppMode;
-
+    };
+    const newVideoTarget = async (obj={}, mode=undefined, clear=false) => {
+      if(mode === undefined)  mode = renderAppMode.value;
       let page = '-1';
       let csid = 0;
-      
-      if(!this.videoTargetCache.hasOwnProperty(mode)){
-        this.videoTargetCache[mode] = {};
-      }else{
-        page = String(this.current_state.id);
-        csid = page;
-      }
-
+      if(!props.videoTargetCache.hasOwnProperty(mode)){ props.videoTargetCache[mode] = {}; }
+      else { page = String(current_state.value.id); csid = page; }
       const region = utils.rectToPoly({
         x: 0, y: 0,
-        width: this.config.info.window.width, 
-        height: this.config.info.window.height,
+        width: config.value.info.window.width, 
+        height: config.value.info.window.height,
       });
-
-      if(!this.videoTargetCache[mode][page] || clear)
-        this.videoTargetCache[mode][page] = {};
-
-      const id = String(Object.keys(this.videoTargetCache[mode][page]).length);
-
-      this.videoTargetCache[mode][page][id] = {
+      if(!props.videoTargetCache[mode][page] || clear)  props.videoTargetCache[mode][page] = {};
+      const id = String(Object.keys(props.videoTargetCache[mode][page]).length);
+      props.videoTargetCache[mode][page][id] = {
         page,
         id,
         current_state_id: csid,
@@ -386,23 +324,17 @@ export default {
         processed: true,
         ...obj //to overwrite preceding values
       };
-
-      return await this.$nextTick(() => {
-        return this.$refs[`loomVideoCanvas-${id}`]
+      return await nextTick(() => {
+        return loomVideoCanvasRefs[id];
       });
-    },
-
-
-    changeVideoFrame(page, videoCanvasID, frameNo, emit=true){
+    };
+    const changeVideoFrame = (page, videoCanvasID, frameNo, emit=true) => {
       if(!frameNo && frameNo !== 0) {
-        this.$refs[`loomVideoCanvas-${videoCanvasID}`].draw(null, emit);
+        loomVideoCanvasRefs[videoCanvasID].draw(null, emit);
         return;
       }
-
-      const vp = this.videoPlayers[this.lastUsedVideoPlayer];
-      this.lastUsedVideoPlayer = (this.lastUsedVideoPlayer+1)%this.numVideoPlayers;
-      const self = this;
-
+      const vp = videoPlayers[lastUsedVideoPlayer.value];
+      lastUsedVideoPlayer.value = (lastUsedVideoPlayer.value+1)%numVideoPlayers.value;
       new Promise((res, rej) => {
         vp.promises.push(res);
         if(!vp.inUse){
@@ -411,78 +343,96 @@ export default {
         setTimeout(() => rej(res), 1000);
       }).then(resolve => {
         const pi = vp.promises.findIndex(res => res == resolve);
-
         vp.player.on('timeupdate', function timeUpdate(){
-          const vpEl = self.$refs[`videoPlayer${vp.id}`];
+          const vpEl = videoPlayerRefs[vp.id];
           if(!vpEl) return;
-
-          if(self.$refs[`loomVideoCanvas-${videoCanvasID}`])
-            self.$refs[`loomVideoCanvas-${videoCanvasID}`].draw(vpEl, emit);
+          if(loomVideoCanvasRefs[videoCanvasID])  loomVideoCanvasRefs[videoCanvasID].draw(vpEl, emit);
           vp.player.off('timeupdate', timeUpdate);
-
-          if(vp.promises[pi+1]) {
-            vp.promises[pi+1](vp.promises[pi+1]);
-          }
-          
+          if(vp.promises[pi+1]) vp.promises[pi+1](vp.promises[pi+1]);
           vp.inUse = false;
           vp.promises.splice(pi, 1);
         });
-        
         vp.inUse = true;
-        vp.player.currentTime(frameNo/this.fps);
+        vp.player.currentTime(frameNo/fps.value);
       }).catch(resolve => {
         const pi = vp.promises.findIndex(res => res == resolve);
         vp.promises.splice(pi, 1);
         console.warn("frame took too long");
         //todo: retry?
       });
-    },
-
-    createNewVideoPlayer(id){
+    };
+    const createNewVideoPlayer = (id) => {
       const vp = {id, promises: []};
-      this.videoPlayers.push(vp);
-      this.$nextTick(()=>{
-        const player = this.setupVideo(this.$refs[`videoPlayer${id}`]);
-        if(player) 
-          vp.player = player;
-        else
-          console.error("No Player!");
+      videoPlayers.push(vp);
+      nextTick(()=>{
+        const player = setupVideo(videoPlayerRefs[id]);
+        if(player) vp.player = player;
+        else  console.error("No Player!");
       });
-    },
-
-    videoCacheModeChange(mode){
-      if(!this.videoTargetCache.hasOwnProperty(mode)){
-        this.newVideoTarget({
-          processed: false,
-        }, mode);
-      }
-    },
-
-    Delete(videoCanvas){
+    };
+    const videoCacheModeChange = (mode) => { if(!props.videoTargetCache.hasOwnProperty(mode))  newVideoTarget({processed: false}, mode); };
+    const Delete = (videoCanvas) => {
       let id = null;
-      if(videoCanvas === null && this.currentVideoTargets !== null) {
-        id = '-1';
-      }else if(videoCanvas){
-        id = videoCanvas.id;
-      } 
-      if(id !== null)  delete this.currentVideoTargets[id];
-    },
-
-    paste(pasteBin){
-      if(pasteBin) {
-        const fn = pasteBin.startupFn;
-        const copy = utils.deepCopy(pasteBin);
-        copy.startupFn = (c) => { c.updateParentCurrentState = false; if(fn) fn(c);}
-        copy.id = String(Object.keys(this.currentVideoTargets).length);
-        this.currentVideoTargets[copy.id] = copy
+      if(videoCanvas === null && currentVideoTargets.value !== null)  id = '-1';
+      else if(videoCanvas)  id = videoCanvas.id;
+      if(id !== null)  delete currentVideoTargets.value[id];
+    };
+    const paste = (pasteBin) => {
+      if(!pasteBin) return;
+      const fn = pasteBin.startupFn;
+      const copy = utils.deepCopy(pasteBin);
+      copy.startupFn = (c) => { c.updateParentCurrentState = false; if(fn) fn(c);}
+      copy.id = String(Object.keys(currentVideoTargets.value).length);
+      currentVideoTargets.value[copy.id] = copy
+    };
+    onMounted(() => {
+      console.log(instance);
+      for(let i = 0; i < numVideoPlayers.value; ++i){
+        createNewVideoPlayer(i);
       }
-    },
+    });
 
-  },
-
-  mounted(){
-    for(let i = 0; i < this.numVideoPlayers; ++i){
-      this.createNewVideoPlayer(i);
+    return {
+      //state
+      config,
+      currentConfig,
+      current_state,
+      loaded,
+      renderAppMode,
+      //targets
+      transformedTargetCache,
+      //video
+      videoPlayers,
+      //history
+      interactionHistory,
+      maxHistoryLength,
+      //
+      numVideoPlayers,
+      lastUsedVideoPlayer,
+      //computed
+      targets,
+      computeCurrentVideoTargets,
+      currentVideoTargets,
+      currentPage,
+      //methods
+      setupVideo,
+      load,
+      init,
+      init_videoTargetCache,
+      updateInteractionHistory,
+      addInstanceLink,
+      changeState,
+      changeStateWithFrameNo,
+      targetCacheModeChange,
+      newVideoTarget,
+      changeVideoFrame,
+      createNewVideoPlayer,
+      videoCacheModeChange,
+      Delete,
+      paste,
+      //refs
+      loomVideoCanvasRefs,
+      videoPlayerRefs,
     }
   }
 }
