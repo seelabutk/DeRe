@@ -56,7 +56,7 @@ import transformMode from './transforms.js'
 import loomVideoCanvas from './loomVideoCanvas.vue'
 import utils from './utils/utils.js'
 
-import { ref, reactive, getCurrentInstance, onMounted, computed, inject, nextTick } from 'vue'
+import { ref, reactive, onMounted, computed, provide, inject, nextTick } from 'vue'
 
 export default {
   name: 'LoomInstance',
@@ -86,10 +86,10 @@ export default {
     id: String,
     name: String,
   },
-  setup(props){
+  setup(props, context){
     //global
-    const instance = getCurrentInstance();
     const emitter = inject("emitter");
+    const {appConfig, linkData, appRefs} = inject('manager');
     //refs
     const loomVideoCanvasRefs = reactive({});
     const videoPlayerRefs = reactive({});
@@ -163,8 +163,7 @@ export default {
       });
     };
     const load = () => {
-      if(loaded.value) return Promise.resolve([config, instance.parent.appConfig]);
-      
+      if(loaded.value) return Promise.resolve([config, appConfig.value]);
       return Promise.all([
         fetch(props.directory + '/' + props.config_filename).then(res => res.text()).then(config => JSON.parse(config)),
         fetch(props.directory + '/' + props.vtc_filename)   .then(res => res.text()).then(vtc    => JSON.parse(vtc   )).catch(e => null)
@@ -218,18 +217,18 @@ export default {
             if(lf.instance == ld.instance){
               const linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_all`;
               const linkToName   = `${lf.instance}_${lf.page}_${lf.vcid}_all`;
-              if(!instance.parent.linkData.linkedCanvases.exists(linkFromName))  instance.parent.linkData.linkedCanvases.add(linkFromName, ld);
-              if(!instance.parent.linkData.linkedCanvases.exists(linkToName  ))  instance.parent.linkData.linkedCanvases.add(linkToName  , lf);
-              instance.parent.linkData.linkedCanvases.merge(linkFromName, linkToName);
+              if(!linkData.linkedCanvases.exists(linkFromName))  linkData.linkedCanvases.add(linkFromName, ld);
+              if(!linkData.linkedCanvases.exists(linkToName  ))  linkData.linkedCanvases.add(linkToName  , lf);
+              linkData.linkedCanvases.merge(linkFromName, linkToName);
             } else {
               for(const frame of lf.frames){
                 ld.frame = frame[0];
                 lf.frame = frame[1];
                 const linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_${ld.frame}`;
                 const linkToName   = `${lf.instance}_${lf.page}_${lf.vcid}_${lf.frame}`;
-                if(!instance.parent.linkData.linkedCanvases.exists(linkFromName))  instance.parent.linkData.linkedCanvases.add(linkFromName, ld);
-                if(!instance.parent.linkData.linkedCanvases.exists(linkToName  ))  instance.parent.linkData.linkedCanvases.add(linkToName  , lf);
-                instance.parent.linkData.linkedCanvases.merge(linkFromName, linkToName);
+                if(!linkData.linkedCanvases.exists(linkFromName))  linkData.linkedCanvases.add(linkFromName, ld);
+                if(!linkData.linkedCanvases.exists(linkToName  ))  linkData.linkedCanvases.add(linkToName  , lf);
+                linkData.linkedCanvases.merge(linkFromName, linkToName);
               }
             }
           }
@@ -266,7 +265,7 @@ export default {
       emitter.emit("runInteractionAnalysis", interactionHistory);
     };
     const addInstanceLink = (fl, ld) => {
-      const fli = instance.parent.appRefs[fl.instance].renderAppMode;
+      const fli = appRefs[fl.instance].renderAppMode;
       if(props.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames == undefined)
         props.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames = [];
       const linkedFrames = props.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames;
@@ -385,11 +384,15 @@ export default {
       copy.id = String(Object.keys(currentVideoTargets.value).length);
       currentVideoTargets.value[copy.id] = copy
     };
-    onMounted(() => {
-      console.log(instance);
+    onMounted((t) => {
       for(let i = 0; i < numVideoPlayers.value; ++i){
         createNewVideoPlayer(i);
       }
+    });
+
+    provide(`instance-${props.id}`, {
+      loomVideoCanvasRefs,
+      
     });
 
     return {
@@ -434,7 +437,7 @@ export default {
       loomVideoCanvasRefs,
       videoPlayerRefs,
     }
-  }
+  },
 }
 </script>
 

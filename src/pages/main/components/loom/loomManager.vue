@@ -146,13 +146,13 @@ import Multiselect from '@vueform/multiselect'
 import loomInstance from './loomInstance.vue'
 import DSet from './utils/disjointset.js'
 import utils from './utils/utils.js'
-import { ref, reactive, onMounted, computed, inject, nextTick, expose } from 'vue'
+import { ref, reactive, onMounted, computed, provide, inject, nextTick } from 'vue'
 
 export default {
   components: { loomInstance,  Multiselect },
   props: ['directories'],
   
-  setup(props){
+  setup(props, {expose}){
     /*******Loom Menu********/
     const selectModeRef = ref(null);
     const helpToggleRef = ref(null);
@@ -444,9 +444,11 @@ export default {
       nextTick(init);
     });
 
-    expoose({
-      appConfig
-    });
+    provide('manager', {
+      appRefs,
+      appConfig,
+      linkData,
+    })
 
     return {
       //modes
