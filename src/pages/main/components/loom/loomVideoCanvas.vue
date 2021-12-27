@@ -1,5 +1,5 @@
 <template>
-  <div ref="container" style="height: 0px; width: 0px; pointer-events: auto;">
+  <div ref="containerRef" style="height: 0px; width: 0px; pointer-events: auto;">
     <!-- positioning of canvas, cutouts, components !-->
     <div
       :style="{
@@ -17,7 +17,7 @@
       <!-- canvas element to redraw video !-->
       <div>
         <canvas
-          ref="canvas"
+          ref="canvasRef"
           style="width: 100%; height: 100%;"
         />
         <!-- drag selection !-->
@@ -43,7 +43,7 @@
           v-for="target in currentTargets"
           :key="target.id" 
           :is="getComponent(target)" 
-          :ref="'target' + target.id"
+          :ref="el => { if(el) componentRefs[target.id] = el }"
           :targetData="target"
           :targets="targets"
           :showHint="overlay"
@@ -88,7 +88,7 @@ import loomButton from './loomComponents/loomButton.vue'
 import loomHover from './loomComponents/loomHover.vue'
 import loomDropdown from './loomComponents/loomDropdown.vue'
 import loomUSA from './loomComponents/loomUSA.vue'
-import { ref, toRefs, reactive, onMounted, onBeforeUnmount, computed, inject, watch, getCurrentInstance } from 'vue'
+import { ref, toRefs, reactive, onMounted, onBeforeUnmount, computed, provide, inject, watch, getCurrentInstance } from 'vue'
 
 export default {
   name: 'loomVideoCanvas',
@@ -96,162 +96,45 @@ export default {
   props: ['regionSelect', 'overlay', 'renderMode', 'renderAppMode', 'dragMode', 'info', 'targets', 'targetData', 'instanceID', 'start_state_id'],
   components: { loomButton, loomHover, loomDropdown, loomBrushingBox, loomUSA },
   setup(props, context){
+    //globals
     const vueInstance = getCurrentInstance();
     const emitter = inject("emitter");
+    const {loomVideoCanvasRefs} = inject(`instance-${props.instanceID}`);
+    const instanceRef = inject('manager').appRefs[props.instanceID];
 
-    //data
-    const polygonMasks = reactive({});
-    const dragStart = ref({x: 0, y: 0});
-    const dragCurr = ref({x: 0, y: 0});
-    const lastFrame = ref(null);
-    const updateParentCurrentState = ref(true);
-    const lastMouseLoc = ref({x: 0, y: 0});
-    const mouseLoc = ref({x: 0, y: 0});
-    const polygonReshapeIdx = ref(-1);
-    const reshapePolygonMode = ref(false);
-    const ctx = ref(null);
-    const resizePolygonMode = ref(false);
-    const selected = ref(false);
-    const dragging = ref(false);
-    const throttle = ref(false);
-    const { dragMode } = toRefs(props)
 
-    //computed
-    const current_state = computed(() => { return Object.values(props.targets).find(t => t.id == props.targetData.current_state_id) || Object.values(props.targets)[1]; });
-    const currentTargets = computed(() => { return utils.currentTargets(current_state.value, props.targets); });
+    //videoCanvas data
+    const containerRef = ref(null);
+    const videoCanvasRef = computed(() => { return loomVideoCanvasRefs[id.value]; });
     const id = computed(() => { return props.targetData.id; });
     const page = computed(() => { return props.targetData.page; });
     const width = computed(() => { return props.targetData.width || props.info.window.width; });
     const height = computed(() => { return props.targetData.height || props.info.window.height; });
     const top = computed(() => { return props.targetData.top || 0 });
     const left = computed(() => { return props.targetData.left || 0 });
-    const parentCanvas = computed(() => { return loomVideoCanvasRefs[props.targetData.parentCanvas] || false; });
+    const parentCanvasRef = computed(() => { return loomVideoCanvasRefs[props.targetData.parentCanvas] || false; });
+
+
+    //polygon mask
+    const polygonMasks = reactive({});
+    const polygonReshapeIdx = ref(-1);
+    const reshapePolygonMode = ref(false);
+    const resizePolygonMode = ref(false);
+    const currentPolygonMask = computed(() => { return polygonMasks[currentPolygonMaskID.value]; });
+    const currentPolygonMaskString = computed(() => { return utils.polyToPolyString(currentPolygonMask.value,0,0); });
     const currentPolygonMaskID = computed(() => {
       for(let cs = current_state.value; cs && cs.parent_id != cs.id; cs = props.targets[cs.parent_id]){
         if(polygonMasks[cs.id]) return cs.id;
       }
       return -1;
     });
-    const currentPolygonMask = computed(() => { return polygonMasks[currentPolygonMaskID.value]; });
-    const currentPolygonMaskString = computed(() => { return utils.polyToPolyString(currentPolygonMask.value,0,0); });
-    const regionExists = computed(() => {
-      if(dragMode.value || !props.regionSelect)  return false;
-      if(
-        dragStart.value.x == -10000 ||
-        dragStart.value.y == -10000 ||
-        dragCurr.value.x == -10000  ||
-        dragCurr.value.y == -10000
-      ) return false;
-      if(
-        Math.abs(dragCurr.value.x - dragStart.value.x) < 5 ||
-        Math.abs(dragCurr.value.y - dragStart.value.y) < 5
-      ) return false;
-      return true;
-    });
-    const dragSelectStyle = computed(() => {
-      const top = Math.min(dragStart.value.y, dragCurr.value.y) + 'px';
-      const left = Math.min(dragStart.value.x, dragCurr.value.x) + 'px';
-      const width = Math.abs(dragCurr.value.x - dragStart.value.x) + 'px';
-      const height = Math.abs(dragCurr.value.y - dragStart.value.y) + 'px';
-      return {
-        position: 'absolute',
-        'display': regionExists.value ? 'block' : 'none',
-        'background-color': 'rgba(0, 0, 0, 0.5)',
-        'border-style': 'dashed',
-        'pointer-events': 'none',
-        top, left, width, height,
-      };
-    });
-
-    //refs
-    const {loomVideoCanvasRefs} = inject(`instance-${props.instanceID}`);
-    const instanceRef = inject('manager').appRefs[props.instanceID];
-    const videoCanvasRef = computed(() => { return loomVideoCanvasRefs[id.value]; });
-    const canvas = ref(null);
-    const container = ref(null)
-
-    //watch TODO FIX 'this'
-    watch(regionExists, (v) => { emitter.emit('regionExists', {exists: v, origin: videoCanvasRef.value}); });
-    watch(dragMode, (v) => { redraw(); });
-
-    //methods
-    const getComponent = (target) => {
-      if(target.id == '-1') return undefined;
-      const loomObjectName = `loom${target.actor.charAt(0).toUpperCase() + target.actor.slice(1)}`;
-      if(loomConfig[props.renderAppMode] && loomConfig[props.renderAppMode].mappings){
-        const componentName = loomConfig[props.renderAppMode].mappings[loomObjectName];
-        if(componentName && vueInstance.components[componentName])
-          return vueInstance.components[componentName];
-      }
-      if(vueInstance.components[loomObjectName])      //defaults
-        return vueInstance.components[loomObjectName];
-      return undefined;
-    };
-    const changeState = (target_id, offset = 0, changeParent=true, emit=true) => {
-      changeStateWithFrameNo(props.targets[target_id].frame_no, offset, changeParent, emit);
-    };
-    const changeStateWithFrameNo = (frame, offset=0, changeParent=true, emit=true) => {
-      const actualFrame = frame + 1 + offset;
-      if(lastFrame.value == actualFrame) return;
-      lastFrame.value = actualFrame;
-      if(changeParent && updateParentCurrentState.value) instanceRef.changeStateWithFrameNo(frame, offset);
-      props.targetData.current_state_id = Object.values(props.targets).find(o => o.frame_no == frame).id;
-      redraw(emit);
-    };
-    const addHistory = (t, e) => { instanceRef.updateInteractionHistory(t, e, props.targetData.id); };
-    const cutSelectedRegion = () => {
-      if(dragStart.value.x > dragCurr.value.x)  [dragStart.value.x, dragCurr.value.x] = [dragCurr.value.x, dragStart.value.x];
-      if(dragStart.value.y > dragCurr.value.y)  [dragStart.value.y, dragCurr.value.y] = [dragCurr.value.y, dragStart.value.y];
-      cutRegions(utils.rectToPoly({
-        x: dragStart.value.x,
-        y: dragStart.value.y,
-        width: dragCurr.value.x - dragStart.value.x, 
-        height: dragCurr.value.y - dragStart.value.y
-      }));
-      dragStart.value = dragCurr.value = {x: -10000, y: -10000};
-    };
-    const copyRegions = (regions, copyUI = true) => { cutRegions(regions, false, copyUI); };
-    const cutRegions = (regions, cutout = true, copyUI = true) => { 
-      if(regions.length > 0 && !props.targetData.parentCanvas){ // auto-new page - create new loomVideoCanvas component
-        instanceRef.newVideoTarget({
-          parentCanvas: props.targetData.id, 
-          startupFn: c => {
-            c.cutRegions(regions, cutout, copyUI);
-            c.emitter.emit('deselect');
-            delete c.targetData.startupFn;
-          },
-          processed: true,
-        });
-        return;
-      }
-      if(regions.length > 0 && regions[0].constructor !== Array) regions = [regions];
-      regions.forEach((region) => {
-        const id = String(Object.keys(instanceRef.currentVideoTargets).length);
-        instanceRef.currentVideoTargets[id] = {
-          page: props.targetData.page,
-          id,
-          current_state_id: current_state.value.id,
-          region,
-          top: props.targetData.top,
-          left: props.targetData.left,
-          makeCutout: cutout,
-          parentCanvas: props.targetData.id,
-          cutouts: [],
-          startupFn: c => {
-            c.emitter.emit('deselect');
-            delete c.targetData.startupFn;
-          },
-          processed: true,
-        };
-      });
-    };
     const resizePolygon = () => {
       const delta = { x: mouseLoc.value.x - lastMouseLoc.value.x, y: mouseLoc.value.y - lastMouseLoc.value.y };
       const scale = { x: (props.targetData.width + delta.x)/props.targetData.width, y: (props.targetData.height + delta.y)/props.targetData.height };
       props.targetData.width += delta.x;
       props.targetData.height += delta.y;
-      canvas.value.width = width.value;
-      canvas.value.height = height.value;
+      canvasRef.value.width = width.value;
+      canvasRef.value.height = height.value;
       utils.scalePolygon(currentPolygonMask.value, scale);
       redraw();
     };
@@ -269,7 +152,7 @@ export default {
         return;
       }
       currentPolygonMask.value[c] = e;
-      const pc = parentCanvas.value;
+      const pc = parentCanvasRef.value;
       if(!pc){
         redraw(); 
         return;
@@ -314,8 +197,53 @@ export default {
       });
       return lines.findIndex(line => ctx.value.isPointInStroke(line, e.x, e.y));
     };
+    const drawPolyOutline = (ctx, poly) => {
+      const color = '#ff0000';
+      const thickness = 2;
+      const boxSize = 8;
+      ctx.lineWidth = thickness;
+      ctx.strokeStyle = color;
+      let square = (function(xp, yp){
+        const bs = Math.ceil(boxSize/2 + thickness/2);
+        ctx.strokeRect(utils.bound(xp, bs, width.value-bs)-bs, utils.bound(yp, bs, height.value-bs)-bs, boxSize, boxSize);
+      }).bind(videoCanvasRef.value);
+
+      ctx.beginPath();
+      ctx.moveTo(utils.bound(poly[0].x, thickness/2, width.value-thickness/2), utils.bound(poly[0].y, thickness/2, height.value-thickness/2));
+      for(let i = 1; i < poly.length; ++i){
+        ctx.lineTo(utils.bound(poly[i].x, thickness/2, width.value-thickness/2), utils.bound(poly[i].y, thickness/2, height.value-thickness/2));
+      }
+      ctx.closePath();
+      ctx.stroke();
+      poly.forEach(p => square(p.x, p.y));
+    };
+
+
+    //events
+    const dragStart = ref({x: 0, y: 0});
+    const dragCurr = ref({x: 0, y: 0});
+    const lastMouseLoc = ref({x: 0, y: 0});
+    const mouseLoc = ref({x: 0, y: 0});
+    const selected = ref(false);
+    const dragging = ref(false);
+    const { dragMode } = toRefs(props);
+    const dragSelectStyle = computed(() => {
+      const top = Math.min(dragStart.value.y, dragCurr.value.y) + 'px';
+      const left = Math.min(dragStart.value.x, dragCurr.value.x) + 'px';
+      const width = Math.abs(dragCurr.value.x - dragStart.value.x) + 'px';
+      const height = Math.abs(dragCurr.value.y - dragStart.value.y) + 'px';
+      return {
+        position: 'absolute',
+        'display': regionExists.value ? 'block' : 'none',
+        'background-color': 'rgba(0, 0, 0, 0.5)',
+        'border-style': 'dashed',
+        'pointer-events': 'none',
+        top, left, width, height,
+      };
+    });
+    watch(dragMode, (v) => { redraw(); });
     const clientToOffset = (e) => {
-      const {left, top} = container.value.getBoundingClientRect();
+      const {left, top} = containerRef.value.getBoundingClientRect();
       return {x: e.clientX - left - props.targetData.left, y: e.clientY - top - props.targetData.top};
     };
     const onScreenMouseMove = (e) => {
@@ -366,7 +294,6 @@ export default {
         }
       }
     };
-    //TODO: fix emitter this?
     const onVideoMouseDown = (e) => {
       document.body.style.cursor = 'default';
       selected.value = true;
@@ -389,26 +316,80 @@ export default {
       reshapePolygonMode.value = false;
       document.body.style.cursor = 'default';
     };
-    const drawPolyOutline = (ctx, poly) => {
-      const color = '#ff0000';
-      const thickness = 2;
-      const boxSize = 8;
-      ctx.lineWidth = thickness;
-      ctx.strokeStyle = color;
-      let square = (function(xp, yp){
-        const bs = Math.ceil(boxSize/2 + thickness/2);
-        ctx.strokeRect(utils.bound(xp, bs, width.value-bs)-bs, utils.bound(yp, bs, height.value-bs)-bs, boxSize, boxSize);
-      }).bind(videoCanvasRef.value);
-
-      ctx.beginPath();
-      ctx.moveTo(utils.bound(poly[0].x, thickness/2, width.value-thickness/2), utils.bound(poly[0].y, thickness/2, height.value-thickness/2));
-      for(let i = 1; i < poly.length; ++i){
-        ctx.lineTo(utils.bound(poly[i].x, thickness/2, width.value-thickness/2), utils.bound(poly[i].y, thickness/2, height.value-thickness/2));
-      }
-      ctx.closePath();
-      ctx.stroke();
-      poly.forEach(p => square(p.x, p.y));
+    const clearSelection = () => {
+      dragging.value = false;
+      dragStart.value = dragCurr.value = {x: -10000, y: -10000};
     };
+    const deselect = () => { selected.value = false; };
+
+
+    //regions
+    const regionExists = computed(() => {
+      if(dragMode.value || !props.regionSelect)  return false;
+      if(
+        dragStart.value.x == -10000 ||
+        dragStart.value.y == -10000 ||
+        dragCurr.value.x == -10000  ||
+        dragCurr.value.y == -10000
+      ) return false;
+      if(
+        Math.abs(dragCurr.value.x - dragStart.value.x) < 5 ||
+        Math.abs(dragCurr.value.y - dragStart.value.y) < 5
+      ) return false;
+      return true;
+    });
+    watch(regionExists, (v) => { emitter.emit('regionExists', {exists: v, origin: videoCanvasRef.value}); });
+    const cutSelectedRegion = () => {
+      if(dragStart.value.x > dragCurr.value.x)  [dragStart.value.x, dragCurr.value.x] = [dragCurr.value.x, dragStart.value.x];
+      if(dragStart.value.y > dragCurr.value.y)  [dragStart.value.y, dragCurr.value.y] = [dragCurr.value.y, dragStart.value.y];
+      cutRegions(utils.rectToPoly({
+        x: dragStart.value.x,
+        y: dragStart.value.y,
+        width: dragCurr.value.x - dragStart.value.x, 
+        height: dragCurr.value.y - dragStart.value.y
+      }));
+      dragStart.value = dragCurr.value = {x: -10000, y: -10000};
+    };
+    const copyRegions = (regions, copyUI = true) => { cutRegions(regions, false, copyUI); };
+    const cutRegions = (regions, cutout = true, copyUI = true) => { 
+      if(regions.length > 0 && !props.targetData.parentCanvas){ // auto-new page - create new loomVideoCanvas component
+        instanceRef.newVideoTarget({
+          parentCanvas: props.targetData.id, 
+          startupFn: c => {
+            c.cutRegions(regions, cutout, copyUI);
+            c.emitter.emit('deselect');
+            delete c.targetData.startupFn;
+          },
+          processed: true,
+        });
+        return;
+      }
+      if(regions.length > 0 && regions[0].constructor !== Array) regions = [regions];
+      regions.forEach((region) => {
+        const id = String(Object.keys(instanceRef.currentVideoTargets).length);
+        instanceRef.currentVideoTargets[id] = {
+          page: props.targetData.page,
+          id,
+          current_state_id: current_state.value.id,
+          region,
+          top: props.targetData.top,
+          left: props.targetData.left,
+          makeCutout: cutout,
+          parentCanvas: props.targetData.id,
+          cutouts: [],
+          startupFn: c => {
+            c.emitter.emit('deselect');
+            delete c.targetData.startupFn;
+          },
+          processed: true,
+        };
+      });
+    };
+
+
+    //drawing
+    const canvasRef = ref(null);
+    const ctx = ref(null);
     const redraw = (emit=false) => { emitter.emit('changeVideoFrame', [props.instanceID, page.value, id.value, lastFrame.value, emit]); };
     const draw = (videoPlayer, emit = true) => {
       if(throttle.value || !videoPlayer) return;
@@ -433,8 +414,8 @@ export default {
       setTimeout(() => throttle.value=false, 20);
     };
     const processFrame = () => {
-      if(props.targetData.processed || !canvas.value) return;
-      const src = cv.imread(canvas.value);
+      if(props.targetData.processed || !canvasRef.value) return;
+      const src = cv.imread(canvasRef.value);
       cv.cvtColor(src, src, cv.COLOR_RGBA2GRAY, 0);
       cv.threshold(src, src, 254, 255, cv.THRESH_BINARY);
       const contours = new cv.MatVector();
@@ -462,19 +443,49 @@ export default {
       src.delete(); contours.delete(); hierarchy.delete();
       context.emit('frame_processed');
     };
-    const clearSelection = () => {
-      dragging.value = false;
-      dragStart.value = dragCurr.value = {x: -10000, y: -10000};
+
+
+    //frame changing
+    const lastFrame = ref(null);
+    const throttle = ref(false);
+    const updateParentCurrentState = ref(true);
+    const changeState = (target_id, offset = 0, changeParent=true, emit=true) => {
+      changeStateWithFrameNo(props.targets[target_id].frame_no, offset, changeParent, emit);
     };
-    const deselect = () => { selected.value = false; };
+    const changeStateWithFrameNo = (frame, offset=0, changeParent=true, emit=true) => {
+      const actualFrame = frame + 1 + offset;
+      if(lastFrame.value == actualFrame) return;
+      lastFrame.value = actualFrame;
+      if(changeParent && updateParentCurrentState.value) instanceRef.changeStateWithFrameNo(frame, offset);
+      props.targetData.current_state_id = Object.values(props.targets).find(o => o.frame_no == frame).id;
+      redraw(emit);
+    };
+    const addHistory = (t, e) => { instanceRef.updateInteractionHistory(t, e, props.targetData.id); };
 
 
-    //TODO: fix this
+    //components
+    const componentRefs = reactive({});
+    const current_state = computed(() => { return Object.values(props.targets).find(t => t.id == props.targetData.current_state_id) || Object.values(props.targets)[1]; });
+    const currentTargets = computed(() => { return utils.currentTargets(current_state.value, props.targets); });
+    const getComponent = (target) => {
+      if(target.id == '-1') return undefined;
+      const loomObjectName = `loom${target.actor.charAt(0).toUpperCase() + target.actor.slice(1)}`;
+      if(loomConfig[props.renderAppMode] && loomConfig[props.renderAppMode].mappings){
+        const componentName = loomConfig[props.renderAppMode].mappings[loomObjectName];
+        if(componentName && vueInstance.components[componentName])
+          return vueInstance.components[componentName];
+      }
+      if(vueInstance.components[loomObjectName])      //defaults
+        return vueInstance.components[loomObjectName];
+      return undefined;
+    };
+
+    
     onMounted(() => {
-      ctx.value = canvas.value.getContext('2d');
+      ctx.value = canvasRef.value.getContext('2d');
       ctx.value.save();
-      canvas.value.width = width.value;
-      canvas.value.height = height.value;
+      canvasRef.value.width = width.value;
+      canvasRef.value.height = height.value;
 
       if(page.value == instanceRef.currentPage){
         props.targetData.current_state_id = props.start_state_id;
@@ -497,7 +508,7 @@ export default {
           const maxX = Math.max(...region.map(p => p.x));
           const minY = Math.min(...region.map(p => p.y));
           const maxY = Math.max(...region.map(p => p.y));
-          const pcutouts = parentCanvas.value.targetData.cutouts;
+          const pcutouts = parentCanvasRef.value.targetData.cutouts;
           pcutouts.push({
             poly: utils.polyToPolyString(currentPolygonMask.value, 0, 0),
             width: maxX-minX,
@@ -521,11 +532,12 @@ export default {
       emitter.emit("selectVideoCanvas", videoCanvasRef.value);
     });
 
+
     onBeforeUnmount(() => {
       //delete cutouts
-      if(parentCanvas.value && parentCanvas.value.targetData){
-        const id = parentCanvas.value.targetData.cutouts.findIndex(c => c.id === props.targetData.id);
-        if(id >= 0) parentCanvas.value.targetData.cutouts.splice(id, 1);
+      if(parentCanvasRef.value && parentCanvasRef.value.targetData){
+        const id = parentCanvasRef.value.targetData.cutouts.findIndex(c => c.id === props.targetData.id);
+        if(id >= 0) parentCanvasRef.value.targetData.cutouts.splice(id, 1);
       }
       //delete event listeners
       emitter.off('clearSelection', clearSelection);
@@ -535,8 +547,9 @@ export default {
       emitter.off('mouseup', onScreenMouseUp);
       emitter.off('mousedown', onScreenMouseDown);
     });
+
     
-    return {
+    const videoCanvas = {
       selected,
       dragStart,
       dragCurr,
@@ -554,9 +567,10 @@ export default {
       dragMode,
       //refs
       loomVideoCanvasRefs,
+      componentRefs,
       instanceRef,
-      canvas,
-      container,
+      canvasRef,
+      containerRef,
       //computed
       current_state,
       currentTargets,
@@ -566,7 +580,7 @@ export default {
       height,
       top,
       left,
-      parentCanvas,
+      parentCanvasRef,
       currentPolygonMaskID,
       currentPolygonMask,
       currentPolygonMaskString,
@@ -597,6 +611,8 @@ export default {
       clearSelection,
       deselect,
     };
+    provide(`videoCanvas-${id}`, videoCanvas);
+    return videoCanvas;
   },
 };
 </script>

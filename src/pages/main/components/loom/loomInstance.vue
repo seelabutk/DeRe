@@ -90,59 +90,22 @@ export default {
     //global
     const emitter = inject("emitter");
     const {appConfig, linkData, appRefs} = inject('manager');
-    //refs
-    const loomVideoCanvasRefs = reactive({});
-    const videoPlayerRefs = reactive({});
-    //data
-    const transformedTargetCache = reactive({});
-    const interactionHistory = reactive([]);
-    const current_state = ref(null);
-    const renderAppMode = ref(null);
+
+
+    //initialization
     const loaded = ref(false);
+    const renderAppMode = ref(null);
     const config = ref(null);
     const currentConfig = ref(null);
-    const maxHistoryLength = ref(30);
-    const videoPlayers = reactive([]);
-    const lastUsedVideoPlayer = ref(0);
-    const fps = ref(30);
-    const numVideoPlayers = ref(3);
-
-
-    //computed
-    const targets = computed(() => {
-      const originalTargets = utils.shallowCopy(transformedTargetCache['original']);
-      delete originalTargets.mode;
-      const newTargets = utils.shallowCopy(transformedTargetCache[renderAppMode.value] || {});
-      delete newTargets.mode;
-      const mergedTargets = utils.deepMerge(originalTargets, newTargets);
-      return mergedTargets;
-    });
-    const computeCurrentVideoTargets = computed(() => {
-      if(!current_state.value || !props.videoTargetCache[renderAppMode.value]) return [null, null];
-      let vt = null;
-      let page = '-1';
-      //traverse up parents
-      for(let cs = current_state.value; vt === null && cs && cs.id != cs.parent_id; cs = targets.value[cs.parent_id]){
-        if(typeof cs.frame_no === "string" && cs.frame_no.includes("frameless")) continue;
-        //check if any of our videoTargets is an ancestor of our current state
-        const vts = Object.entries(props.videoTargetCache[renderAppMode.value]);
-        for(let i = 0; i < vts.length; ++i){
-          if(String(cs.id) === vts[i][0]){
-            vt = vts[i][1];
-            page = vts[i][0];
-            break;
-          }
-        }
-      }
-      if(vt === null){
-        vt = props.videoTargetCache[renderAppMode.value]['-1'];   //return root
-      }
-      return [page, vt];
-    });
-    const currentVideoTargets = computed(() => { return computeCurrentVideoTargets.value[1]; });
-    const currentPage = computed(() => { return computeCurrentVideoTargets.value[0]; });
-
-    //methods
+    const createNewVideoPlayer = (id) => {
+      const vp = {id, promises: []};
+      videoPlayers.push(vp);
+      nextTick(()=>{
+        const player = setupVideo(videoPlayerRefs[id]);
+        if(player) vp.player = player;
+        else  console.error("No Player!");
+      });
+    };
     const setupVideo = (element) => {
       const p = videojs.getPlayer(element);
       if(p) return p;
@@ -258,30 +221,13 @@ export default {
         props.videoTargetCache[rarm][key] = vt_config[key];
       }
     };
-    const updateInteractionHistory = (target, e, videoCanvas) => {
-      const interaction = { id: target.id, videoCanvas, target, event: e };
-      interactionHistory.push(interaction);
-      if(interactionHistory.length > maxHistoryLength.value)  interactionHistory.shift();
-      emitter.emit("runInteractionAnalysis", interactionHistory);
-    };
-    const addInstanceLink = (fl, ld) => {
-      const fli = appRefs[fl.instance].renderAppMode;
-      if(props.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames == undefined)
-        props.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames = [];
-      const linkedFrames = props.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames;
-      const lf = linkedFrames.find(lf => lf.mode == ld.mode && lf.page == ld.page && lf.vcid == ld.vcid);
-      if(lf != undefined){
-        lf.frames = lf.frames || [];
-        lf.frames.push([fl.frame, ld.frame]);
-      } else {
-        const cld = {...ld}; //shallow copy
-        if(fl.instance != ld.instance){
-          delete cld.frame;
-          cld.frames = [[fl.frame, ld.frame]];
-        }
-        linkedFrames.push(cld)
-      }
-    };
+    const videoCacheModeChange = (mode) => { if(!props.videoTargetCache.hasOwnProperty(mode))  newVideoTarget({processed: false}, mode); };
+
+
+    //state changing
+    const current_state = ref(null);
+    const interactionHistory = reactive([]);
+    const maxHistoryLength = ref(30);
     const changeState = (target_id, offset = 0) => {
       const target = targets.value[target_id];
       if(target === undefined)  { console.error("Invalid state");   return; }
@@ -296,37 +242,20 @@ export default {
         transformedTargetCache[mode] = config.value[mode].data || {};
       }
     };
-    const newVideoTarget = async (obj={}, mode=undefined, clear=false) => {
-      if(mode === undefined)  mode = renderAppMode.value;
-      let page = '-1';
-      let csid = 0;
-      if(!props.videoTargetCache.hasOwnProperty(mode)){ props.videoTargetCache[mode] = {}; }
-      else { page = String(current_state.value.id); csid = page; }
-      const region = utils.rectToPoly({
-        x: 0, y: 0,
-        width: config.value.info.window.width, 
-        height: config.value.info.window.height,
-      });
-      if(!props.videoTargetCache[mode][page] || clear)  props.videoTargetCache[mode][page] = {};
-      const id = String(Object.keys(props.videoTargetCache[mode][page]).length);
-      props.videoTargetCache[mode][page][id] = {
-        page,
-        id,
-        current_state_id: csid,
-        region,
-        top: 0,
-        left: 0,
-        makeCutout: false,
-        parentCanvas: false,
-        cutouts: [],
-        startupFn: null,
-        processed: true,
-        ...obj //to overwrite preceding values
-      };
-      return await nextTick(() => {
-        return loomVideoCanvasRefs[id];
-      });
+    const updateInteractionHistory = (target, e, videoCanvas) => {
+      const interaction = { id: target.id, videoCanvas, target, event: e };
+      interactionHistory.push(interaction);
+      if(interactionHistory.length > maxHistoryLength.value)  interactionHistory.shift();
+      emitter.emit("runInteractionAnalysis", interactionHistory);
     };
+
+
+    //frame changing
+    const fps = ref(30);
+    const numVideoPlayers = ref(3);
+    const videoPlayers = reactive([]);
+    const lastUsedVideoPlayer = ref(0);
+    const videoPlayerRefs = reactive({});
     const changeVideoFrame = (page, videoCanvasID, frameNo, emit=true) => {
       if(!frameNo && frameNo !== 0) {
         loomVideoCanvasRefs[videoCanvasID].draw(null, emit);
@@ -360,16 +289,101 @@ export default {
         //todo: retry?
       });
     };
-    const createNewVideoPlayer = (id) => {
-      const vp = {id, promises: []};
-      videoPlayers.push(vp);
-      nextTick(()=>{
-        const player = setupVideo(videoPlayerRefs[id]);
-        if(player) vp.player = player;
-        else  console.error("No Player!");
+
+
+    //frame linking
+    const addInstanceLink = (fl, ld) => {
+      const fli = appRefs[fl.instance].renderAppMode;
+      if(props.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames == undefined)
+        props.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames = [];
+      const linkedFrames = props.videoTargetCache[fli][fl.page][fl.vcid].linkedFrames;
+      const lf = linkedFrames.find(lf => lf.mode == ld.mode && lf.page == ld.page && lf.vcid == ld.vcid);
+      if(lf != undefined){
+        lf.frames = lf.frames || [];
+        lf.frames.push([fl.frame, ld.frame]);
+      } else {
+        const cld = {...ld}; //shallow copy
+        if(fl.instance != ld.instance){
+          delete cld.frame;
+          cld.frames = [[fl.frame, ld.frame]];
+        }
+        linkedFrames.push(cld)
+      }
+    };
+
+
+    //target components
+    const targets = computed(() => {
+      const originalTargets = utils.shallowCopy(transformedTargetCache['original']);
+      delete originalTargets.mode;
+      const newTargets = utils.shallowCopy(transformedTargetCache[renderAppMode.value] || {});
+      delete newTargets.mode;
+      const mergedTargets = utils.deepMerge(originalTargets, newTargets);
+      return mergedTargets;
+    });
+
+
+    //video targets
+    const loomVideoCanvasRefs = reactive({});
+    const transformedTargetCache = reactive({});
+    const computeCurrentVideoTargets = computed(() => {
+      if(!current_state.value || !props.videoTargetCache[renderAppMode.value]) return [null, null];
+      let vt = null;
+      let page = '-1';
+      //traverse up parents
+      for(let cs = current_state.value; vt === null && cs && cs.id != cs.parent_id; cs = targets.value[cs.parent_id]){
+        if(typeof cs.frame_no === "string" && cs.frame_no.includes("frameless")) continue;
+        //check if any of our videoTargets is an ancestor of our current state
+        const vts = Object.entries(props.videoTargetCache[renderAppMode.value]);
+        for(let i = 0; i < vts.length; ++i){
+          if(String(cs.id) === vts[i][0]){
+            vt = vts[i][1];
+            page = vts[i][0];
+            break;
+          }
+        }
+      }
+      if(vt === null){
+        vt = props.videoTargetCache[renderAppMode.value]['-1'];   //return root
+      }
+      return [page, vt];
+    });
+    const currentVideoTargets = computed(() => { return computeCurrentVideoTargets.value[1]; });
+    const currentPage = computed(() => { return computeCurrentVideoTargets.value[0]; });
+    const newVideoTarget = async (obj={}, mode=undefined, clear=false) => {
+      if(mode === undefined)  mode = renderAppMode.value;
+      let page = '-1';
+      let csid = 0;
+      if(!props.videoTargetCache.hasOwnProperty(mode)){ props.videoTargetCache[mode] = {}; }
+      else { page = String(current_state.value.id); csid = page; }
+      const region = utils.rectToPoly({
+        x: 0, y: 0,
+        width: config.value.info.window.width, 
+        height: config.value.info.window.height,
+      });
+      if(!props.videoTargetCache[mode][page] || clear)  props.videoTargetCache[mode][page] = {};
+      const id = String(Object.keys(props.videoTargetCache[mode][page]).length);
+      props.videoTargetCache[mode][page][id] = {
+        page,
+        id,
+        current_state_id: csid,
+        region,
+        top: 0,
+        left: 0,
+        makeCutout: false,
+        parentCanvas: false,
+        cutouts: [],
+        startupFn: null,
+        processed: true,
+        ...obj //to overwrite preceding values
+      };
+      return await nextTick(() => {
+        return loomVideoCanvasRefs[id];
       });
     };
-    const videoCacheModeChange = (mode) => { if(!props.videoTargetCache.hasOwnProperty(mode))  newVideoTarget({processed: false}, mode); };
+
+
+    //operations
     const Delete = (videoCanvas) => {
       let id = null;
       if(videoCanvas === null && currentVideoTargets.value !== null)  id = '-1';
@@ -384,18 +398,12 @@ export default {
       copy.id = String(Object.keys(currentVideoTargets.value).length);
       currentVideoTargets.value[copy.id] = copy
     };
-    onMounted((t) => {
-      for(let i = 0; i < numVideoPlayers.value; ++i){
-        createNewVideoPlayer(i);
-      }
-    });
 
-    provide(`instance-${props.id}`, {
-      loomVideoCanvasRefs,
-      
-    });
 
-    return {
+    onMounted((t) => { for(let i = 0; i < numVideoPlayers.value; ++i)  createNewVideoPlayer(i); });
+
+
+    const instance = {
       //state
       config,
       currentConfig,
@@ -436,7 +444,9 @@ export default {
       //refs
       loomVideoCanvasRefs,
       videoPlayerRefs,
-    }
+    };
+    provide(`instance-${props.id}`, instance);
+    return instance
   },
 }
 </script>

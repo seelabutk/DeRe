@@ -348,7 +348,7 @@ export default {
     });
     const mapLinkClicked = async () => {
       if(mapLinkData.mapLinkMode == 'selectable'){
-        mapLinkData.mapComponent = (await addMap()).$refs['target0'];
+        mapLinkData.mapComponent = (await addMap()).componentRefs['0']; //.loomVideoCanvasRefs['0'];
         mapLinkData.mapLinkMode = 'linkingFrom';
       } else if(mapLinkData.mapLinkMode == 'linkingFrom'){
         mapLinkData.firstLink = await mapLinkData.mapComponent.getMapping();
@@ -444,13 +444,7 @@ export default {
       nextTick(init);
     });
 
-    provide('manager', {
-      appRefs,
-      appConfig,
-      linkData,
-    })
-
-    return {
+    const manager = {
       //modes
       appModes,
       renderModes,
@@ -504,6 +498,8 @@ export default {
       selectModeRef,
       appRefs,
     };
+    provide('manager', manager)
+    return manager;
   }
 }
 </script>

@@ -11,7 +11,7 @@ import utils from '../utils/utils'
 export default {
   name: 'USAMap',
   props: ['targetData'],
-
+  inject: ['manager'],
   computed: {
 
     width(){ return this.$parent.targetData.width; },
@@ -93,7 +93,7 @@ export default {
       }));
     },
     async getMapping(){
-      this.$parent.$parent.$parent.regionSelect.value = false;
+      this.manager.regionSelect.value = false;
       return await this.$nextTick(() => {
         const linkFroms = Object.entries(this.getRelativeStateCenters()).map(([state, loc]) => {
           const els = document.elementsFromPoint(...Object.values(loc));
@@ -101,7 +101,7 @@ export default {
           if(el === undefined)  return null;
           const id = el.id;
           
-          const component = this.$parent.$parent.$parent.activeComponents.value[id];
+          const component = this.manager.activeComponents.value[id];
           if(component === undefined || !component.isLoomComponent) return null;
           return {
             mode: component.renderMode,
@@ -111,7 +111,7 @@ export default {
             frame: component.frame,
           };
         }).filter(ld => ld != null);
-        this.$parent.$parent.$parent.regionSelect.value = true;
+        this.manager.regionSelect.value = true;
         return linkFroms;
       });
     }
