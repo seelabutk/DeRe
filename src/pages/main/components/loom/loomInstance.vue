@@ -354,8 +354,16 @@ export default {
       if(mode === undefined)  mode = renderAppMode.value;
       let page = '-1';
       let csid = 0;
-      if(!props.videoTargetCache.hasOwnProperty(mode)){ props.videoTargetCache[mode] = {}; }
-      else { page = String(current_state.value.id); csid = page; }
+      if(!props.videoTargetCache.hasOwnProperty(mode)){
+        props.videoTargetCache[mode] = {};
+      } else { 
+        if(obj.newPageFromRoot === false){
+          page = currentPage.value;
+        }else{
+          page = String(current_state.value.id); 
+        }
+        csid = page;
+      }
       const region = utils.rectToPoly({
         x: 0, y: 0,
         width: config.value.info.window.width, 
@@ -381,6 +389,9 @@ export default {
         return loomVideoCanvasRefs[id];
       });
     };
+    const destroyVideoTarget = async (mode, page, id) => {
+      delete props.videoTargetCache[mode][page][id];
+    }
 
 
     //operations
@@ -436,6 +447,7 @@ export default {
       changeStateWithFrameNo,
       targetCacheModeChange,
       newVideoTarget,
+      destroyVideoTarget,
       changeVideoFrame,
       createNewVideoPlayer,
       videoCacheModeChange,

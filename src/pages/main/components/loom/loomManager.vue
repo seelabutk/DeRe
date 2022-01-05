@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div ref="managerRef">
 
     <div id="loom-menu" :style="{
       position: 'absolute',
@@ -152,7 +152,10 @@ export default {
   components: { loomInstance,  Multiselect },
   props: ['directories'],
   
-  setup(props, {expose}){
+  setup(props, context){
+    //globals
+    const managerRef = ref(null);
+
     /*******Loom Menu********/
     const selectModeRef = ref(null);
     const helpToggleRef = ref(null);
@@ -199,20 +202,28 @@ export default {
 
     /*****Saving/Loading*******/
     const saveVideoCanvasState = () => {
-      const name = prompt("Enter name to save config as:");
-      if(name == null || name == "")  return;
-      const saveNames = JSON.parse(localStorage.getItem('saveNames')) || [];
-      if(saveNames.some(n => n == name)){
-        prompt("Name already taken");
+      let dflt = 'None';
+      if(appConfig.value['startState'] && appConfig.value['startState'].saveName)
+        dflt = appConfig.value['startState'].saveName;
+      let name = prompt(`Enter name to save config as: (default: ${dflt})`);
+      if(name == '' && dflt != 'None'){
+        name = dflt;
+      }else if(name == '') {
         return;
       }
-      saveNames.push(name);
+      const saveNames = new Set(JSON.parse(localStorage.getItem('saveNames'))) || new Set();
+      if(saveNames.has(name)){
+        if(!confirm("Name already taken"))
+          return;
+      }
+      saveNames.add(name);
       appConfig.value['startState'] = {
+        saveName: name,
         appMode: appMode.value,
         current_state: current_state.value,
       };
       try{
-        localStorage.setItem('saveNames', JSON.stringify(saveNames));
+        localStorage.setItem('saveNames', JSON.stringify([...saveNames]));
         localStorage.setItem(name, JSON.stringify(appConfig.value));
         //todo: offer file download
       } catch (err) {
@@ -237,7 +248,7 @@ export default {
       appConfig.value = JSON.parse(localStorage.getItem(loadName));
       current_state.value = appConfig.value['startState']['current_state'];
       appMode.value = appConfig.value['startState']['appMode'];
-      delete appConfig.value['startState'];
+      // delete appConfig.value['startState'];
       init();
     };
 
@@ -265,6 +276,10 @@ export default {
       if(appRefs[currVideoCanvasSelected.value.instanceID]) {
         return await appRefs[currVideoCanvasSelected.value.instanceID].newVideoTarget(obj, mode, clear);
       }
+    };
+    const destroyVideoTarget = (vc)=> {
+      console.log(vc);
+      appRefs[vc.instanceID].destroyVideoTarget(vc.mode, vc.page, vc.id);
     };
     const cutRegion = () => {
       dragMode.value = true;
@@ -315,7 +330,7 @@ export default {
       if(!linkData.linkedCanvases.exists(linkToName))    linkData.linkedCanvases.add(linkToName, fl);
       if(!linkData.linkedCanvases.exists(linkFromName))  linkData.linkedCanvases.add(linkFromName, ld);
       linkData.linkedCanvases.merge(linkToName, linkFromName);  
-      videoCanvasSelectedRef.value.addInstanceLink(fl, ld);
+      currVideoCanvasSelected.value.instanceRef.addInstanceLink(fl, ld);
       linkData.firstLink = null;
     };
     const linkVideoCanvasStyle = computed(() => {
@@ -346,27 +361,34 @@ export default {
       firstLink: null,
       mapComponent: null,
     });
-    const mapLinkClicked = async () => {
+    const mapLinkClicked = async (e) => {
+      const destroyMap = () => {
+        if(mapLinkData.mapComponent != null)  destroyVideoTarget(mapLinkData.mapComponent.$parent);
+        mapLinkData.mapLinkMode = 'selectable';
+        mapLinkData.firstLink = null;
+        mapLinkData.mapComponent = null;
+      };
       if(mapLinkData.mapLinkMode == 'selectable'){
-        mapLinkData.mapComponent = (await addMap()).componentRefs['0']; //.loomVideoCanvasRefs['0'];
+        if(mapLinkData.mapComponent != null)  return;
+        mapLinkData.mapComponent = (await addMap()).componentRefs['0'];
         mapLinkData.mapLinkMode = 'linkingFrom';
       } else if(mapLinkData.mapLinkMode == 'linkingFrom'){
         mapLinkData.firstLink = await mapLinkData.mapComponent.getMapping();
         mapLinkData.mapLinkMode = 'linkingTo';
       } else if(mapLinkData.mapLinkMode == 'linkingTo'){
-        const lds = mapLinkData.mapComponent.getMapping();
+        const lds = await mapLinkData.mapComponent.getMapping();
         const fls = mapLinkData.firstLink;
         Object.keys(lds).forEach(key => {
           if(fls.hasOwnProperty(key)){
             createLink(fls[key], lds[key]);
           }
         });
-        mapLinkData.mapLinkMode = 'selectable';
+        destroyMap();
       }
     };
     const addMap = async() => {
-      const width = 100;
-      const height = 100;
+      const width = 550;
+      const height = 315;
       return await newVideoTarget({
         reshapeable: false,
         resizeable: true,
@@ -383,6 +405,7 @@ export default {
           delete c.targetData.startupFn;
         },
         drawImage: false,
+        newPageFromRoot: false,
         current_state_id: '0',
       }, undefined, false);
     };
@@ -415,6 +438,7 @@ export default {
       });
     };
     onMounted(() => {
+      window.app = manager;
       const emitter = inject("emitter");
       emitter.on("regionExists", e => {
         regionExists.value = e.exists;
@@ -471,6 +495,7 @@ export default {
       init,
       addMap,
       newVideoTarget,
+      destroyVideoTarget,
       cutRegion,
       toggleRegion,
       toggleHintHelp,
@@ -491,6 +516,7 @@ export default {
       addComponent,
       removeComponent,
       //refs
+      managerRef,
       appModeRef,
       renderModeRef,
       regionToggleRef,
