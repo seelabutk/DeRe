@@ -11,18 +11,19 @@
 import utils from '../utils/utils'
 export default {
   name: 'USAMap',
-  props: ['targetData'],
+  props: ['targetData', 'vcTargetData'],
   inject: ['manager'],
   computed: {
-    width(){ return this.$parent.targetData.width; },
-    height(){return this.$parent.targetData.height; },
+    width(){ return this.$parent.targetData.width*this.scale.x; },
+    height(){ return this.$parent.targetData.height*this.scale.y; },
+    scale(){ return this.vcTargetData.scale || {x: 1.0, y: 1.0}; },
     calcStyle(){
       return {
         position: "absolute",
         top: '0px',
         left: '0px',
-        width: this.width + 'px',
-        height: this.height + 'px',
+        width: `${this.width}px`,
+        height: `${this.height}px`,
         backgroundColor: 'rgba(0,0,0,0.2)',
         backgroundImage: `url(assets/USA_${this.projectionType}.png)`,
         backgroundSize: `${this.width}px ${this.height}px`,
@@ -152,7 +153,7 @@ export default {
     async getMapping(){
       this.manager.regionSelect.value = false;
       return await this.$nextTick(() => {
-        const linkFroms = Object.entries(this.getRelativeStateCenters()).map(([state, loc]) => {
+        const linkFroms = Object.fromEntries(Object.entries(this.getRelativeStateCenters()).map(([state, loc]) => {
           const els = document.elementsFromPoint(...Object.values(loc));
           const el = els.find(el => el.id != '');
           if(el === undefined)  return null;
@@ -160,14 +161,14 @@ export default {
           
           const component = this.manager.activeComponents.value[id];
           if(component === undefined || !component.isLoomComponent) return null;
-          return {
+          return [state, {
             mode: component.renderMode,
             instance: component.instanceID,
             page: component.page,
             vcid: component.vcid,
             frame: component.frame,
-          };
-        }).filter(ld => ld != null);
+          }];
+        }).filter(ld => ld != null));
         this.manager.regionSelect.value = true;
         return linkFroms;
       });

@@ -278,7 +278,6 @@ export default {
       }
     };
     const destroyVideoTarget = (vc)=> {
-      console.log(vc);
       appRefs[vc.instanceID].destroyVideoTarget(vc.mode, vc.page, vc.id);
     };
     const cutRegion = () => {
@@ -378,6 +377,8 @@ export default {
       } else if(mapLinkData.mapLinkMode == 'linkingTo'){
         const lds = await mapLinkData.mapComponent.getMapping();
         const fls = mapLinkData.firstLink;
+
+        console.log(lds, fls)
         Object.keys(lds).forEach(key => {
           if(fls.hasOwnProperty(key)){
             createLink(fls[key], lds[key]);

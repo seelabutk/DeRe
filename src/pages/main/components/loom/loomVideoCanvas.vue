@@ -1,11 +1,15 @@
 <template>
   <div ref="containerRef" style="height: 0px; width: 0px; pointer-events: auto;">
+    <!-- videoCanvas polygon mask !-->
+    <svg pointer-events="none">
+      <clipPath :id="`clipping-${instanceID}-${targetData.id}`">
+        <polygon  pointer-events="fill" :points="currentPolygonMask ? currentPolygonMaskStringScaled : null"/>
+      </clipPath>
+    </svg>
     <!-- positioning of canvas, cutouts, components !-->
     <div
       :style="{
         position: 'absolute',
-        width: width + 'px',
-        height: height + 'px',
         top: top + 'px',
         left: left + 'px',
         clipPath: `url(#clipping-${instanceID}-${id})`,
@@ -18,7 +22,12 @@
       <div>
         <canvas
           ref="canvasRef"
-          style="width: 100%; height: 100%;"
+          :width="width"
+          :height="height"
+          :style="{
+            width: (width*scale.x).toPrecision(4) + 'px',
+            height: (height*scale.y).toPrecision(4) + 'px',
+          }"
         />
         <!-- drag selection !-->
         <div :style="dragSelectStyle"/>
@@ -45,6 +54,7 @@
           :is="getComponent(target)" 
           :ref="el => { if(el) componentRefs[target.id] = el }"
           :targetData="target"
+          :vcTargetData="targetData"
           :targets="targets"
           :showHint="overlay"
           :interactable="!regionSelect"
@@ -56,11 +66,11 @@
       <svg 
         v-for="(cutout,id) in targetData.cutouts"
         :key="id"
-        :width="width"
-        :height="height"
+        :width="(width*scale.x).toPrecision(4)"
+        :height="(height*scale.y).toPrecision(4)"
         :style="{
-          width: width,
-          height: height,
+          width: (width*scale.x).toPrecision(4),
+          height: (height*scale.y).toPrecision(4),
           top: '0px',
           left: '0px',
           position: 'absolute',
@@ -68,15 +78,9 @@
         }"
         pointer-events='none'
       >
-        <polygon pointer-events="fill" :points="cutout.poly"/>
+        <polygon pointer-events="fill" :points="utils.polyToPolyString(utils.scalePolygon(cutout.poly, scale), 0, 0)"/>
       </svg>
     </div>
-    <!-- videoCanvas polygon mask !-->
-    <svg height="0" pointer-events="none">
-      <clipPath :id="`clipping-${instanceID}-${targetData.id}`">
-        <polygon  pointer-events="fill" :points="currentPolygonMask ? currentPolygonMaskString : null"/>
-      </clipPath>
-    </svg>
   </div>
 </template>
 
@@ -88,7 +92,7 @@ import loomButton from './loomComponents/loomButton.vue'
 import loomHover from './loomComponents/loomHover.vue'
 import loomDropdown from './loomComponents/loomDropdown.vue'
 import loomUSA from './loomComponents/loomUSA.vue'
-import { ref, toRefs, reactive, onMounted, onBeforeUnmount, computed, provide, inject, watch, getCurrentInstance } from 'vue'
+import { ref, toRefs, reactive, onMounted, onBeforeUnmount, computed, provide, inject, watch, watchEffect, getCurrentInstance } from 'vue'
 
 export default {
   name: 'loomVideoCanvas',
@@ -97,19 +101,25 @@ export default {
   components: { loomButton, loomHover, loomDropdown, loomBrushingBox, loomUSA },
   setup(props, context){
     //globals
+    const manager = inject('manager');
     const vueInstance = getCurrentInstance();
     const emitter = inject("emitter");
     const {loomVideoCanvasRefs} = inject(`instance-${props.instanceID}`);
-    const instanceRef = inject('manager').appRefs[props.instanceID];
+    const instanceRef = manager.appRefs[props.instanceID];
 
 
     //videoCanvas data
+    const scale = ref({ x: 1.0, y: 1.0 }); 
     const containerRef = ref(null);
+    const canvasRef = ref(null);
     const videoCanvasRef = computed(() => { return loomVideoCanvasRefs[id.value]; });
     const id = computed(() => { return props.targetData.id; });
     const page = computed(() => { return props.targetData.page; });
+    const mode = computed(() => { return props.renderAppMode; }); 
     const width = computed(() => { return props.targetData.width || props.info.window.width; });
+    const scaledWidth = computed(() => { return width * scale.x; });
     const height = computed(() => { return props.targetData.height || props.info.window.height; });
+    const scaledHeight = computed(() => { return height * scale.y; });
     const top = computed(() => { return props.targetData.top || 0 });
     const left = computed(() => { return props.targetData.left || 0 });
     const parentCanvasRef = computed(() => { return loomVideoCanvasRefs[props.targetData.parentCanvas] || false; });
@@ -121,7 +131,9 @@ export default {
     const reshapePolygonMode = ref(false);
     const resizePolygonMode = ref(false);
     const currentPolygonMask = computed(() => { return polygonMasks[currentPolygonMaskID.value]; });
-    const currentPolygonMaskString = computed(() => { return utils.polyToPolyString(currentPolygonMask.value,0,0); });
+    const currentPolygonMaskScaled = computed(() => { return utils.scalePolygon(currentPolygonMask.value, scale.value); });
+    const currentPolygonMaskString = computed(() => { return utils.polyToPolyString(currentPolygonMask.value, 0, 0); });
+    const currentPolygonMaskStringScaled = computed(() => { return utils.polyToPolyString(currentPolygonMaskScaled.value, 0, 0); });
     const currentPolygonMaskID = computed(() => {
       for(let cs = current_state.value; cs && cs.parent_id != cs.id; cs = props.targets[cs.parent_id]){
         if(polygonMasks[cs.id]) return cs.id;
@@ -129,13 +141,23 @@ export default {
       return -1;
     });
     const resizePolygon = () => {
-      const delta = { x: mouseLoc.value.x - lastMouseLoc.value.x, y: mouseLoc.value.y - lastMouseLoc.value.y };
-      const scale = { x: (props.targetData.width + delta.x)/props.targetData.width, y: (props.targetData.height + delta.y)/props.targetData.height };
-      props.targetData.width += delta.x;
-      props.targetData.height += delta.y;
-      canvasRef.value.width = width.value;
-      canvasRef.value.height = height.value;
-      utils.scalePolygon(currentPolygonMask.value, scale);
+      const delta = { 
+        x: mouseLoc.value.x - lastMouseLoc.value.x, 
+        y: mouseLoc.value.y - lastMouseLoc.value.y 
+      };
+      const oscale = scale.value;
+      scale.value = {                             
+        x: (scale.value.x*width.value + delta.x)/width.value,
+        y: (scale.value.y*height.value + delta.y)/height.value,
+      };
+      const dscale = {  //difference in scales
+        x: oscale.x - scale.value.x,
+        y: oscale.y - scale.value.y,
+      };
+      props.targetData.scale = scale.value;
+      const bbox = utils.boundingBox(currentPolygonMask.value);
+      props.targetData.left += dscale.x*bbox.xmin;
+      props.targetData.top += dscale.y*bbox.ymin;
       redraw();
     };
     const reshapePolygon = (e) => {
@@ -151,7 +173,9 @@ export default {
         redraw();
         return;
       }
-      currentPolygonMask.value[c] = e;
+      e.x = utils.bound(e.x, 0, width.value*scale.value.x);
+      e.y = utils.bound(e.y, 0, height.value*scale.value.y);
+      currentPolygonMask.value[c] = { x: e.x/scale.value.x, y: e.y/scale.value.y };
       const pc = parentCanvasRef.value;
       if(!pc){
         redraw(); 
@@ -161,13 +185,13 @@ export default {
       const cidx = pcutouts.findIndex(c => c.id == props.targetData.id);
       if(cidx >= 0){
         const newCutout = pcutouts[cidx];
-        newCutout.poly = utils.polyToPolyString(currentPolygonMask.value, 0, 0);
+        newCutout.poly = currentPolygonMask.value;
         pcutouts.splice(cidx, 1, newCutout);
       }
       redraw();
     };
     const addNewVertex = (vertIdx, e) => {
-      currentPolygonMask.value.splice(vertIdx+1, 0, e);
+      currentPolygonMask.value.splice(vertIdx+1, 0, {x: e.x/scale.value.x, y: e.y/scale.value.y});
       reshapePolygonMode.value = true;
       polygonReshapeIdx.value = vertIdx+1;
       redraw();
@@ -177,12 +201,12 @@ export default {
       const thickness = 2;
       const boxSize = 8;
       const bs = Math.ceil(boxSize/2 + thickness/2);
-      const paths = currentPolygonMask.value.map(pm => {
+      const paths = currentPolygonMaskScaled.value.map(pm => {
         let dx = 0, dy = 0;
         if(bs > pm.x) dx = -(pm.x-bs);
-        else if(width.value < pm.x+bs) dx = width.value - (pm.x+bs);
+        else if(scaledWidth.value < pm.x+bs) dx = scaledWidth.value - (pm.x+bs);
         if(bs > pm.y) dy = -(pm.y-bs);
-        else if(height.value < pm.y+bs) dy = height.value - (pm.y+bs);
+        else if(scaledHeight.value < pm.y+bs) dy = scaledHeight.value - (pm.y+bs);
         const square = [{x: pm.x+dx-bs, y: pm.y+dy-bs}, {x: pm.x+dx+bs, y: pm.y+dy-bs}, {x: pm.x+dx+bs, y: pm.y+dy+bs}, {x: pm.x+dx-bs, y: pm.y+dy+bs}];
         return utils.polyToPath2D(square);
       });
@@ -190,7 +214,7 @@ export default {
     };
     const isPolygonLineHovered = (e) => {
       if(!props.regionSelect) return -1;
-      const lines = currentPolygonMask.value.map((pm, i, pms) => {
+      const lines = currentPolygonMaskScaled.value.map((pm, i, pms) => {
         const nidx = (i+1)%pms.length;
         const pn = pms[nidx];
         return utils.polyToPath2D([pm, pn]);
@@ -252,10 +276,10 @@ export default {
       if(reshapePolygonMode.value){
         reshapePolygon(mouseLoc.value);
         return;
-      } else if(resizePolygonMode.value && props.targetData.resizeable == true){
+      } else if(resizePolygonMode.value && props.targetData.resizeable !== false){
         resizePolygon();
         return;
-      } else if(!dragMode.value && props.targetData.reshapeable !== false || props.targetData.resizeable == true) {
+      } else if(!dragMode.value && props.targetData.reshapeable !== false || props.targetData.resizeable !== false) {
         if(isPolygonVertexHovered(mouseLoc.value) >= 0){
           document.body.style.cursor = 'move';
         } else if(isPolygonLineHovered(mouseLoc.value) >= 0) {
@@ -274,10 +298,10 @@ export default {
     const onScreenMouseDown = (e) => {
       const mouseLoc = clientToOffset(e);
       const shift = e.shiftKey;
-      if(props.targetData.reshapeable !== false || props.targetData.resizeable == true){
+      if(props.targetData.reshapeable !== false || props.targetData.resizeable !== false){
         const reshapePoly = isPolygonVertexHovered(mouseLoc);
         if(reshapePoly >= 0 && !dragMode.value){
-          if(shift && props.targetData.resizeable){
+          if(shift && props.targetData.resizeable !== false){
             resizePolygonMode.value = true;
           } else if(props.targetData.reshapeable !== false) {
             resizePolygonMode.value = false;
@@ -388,7 +412,6 @@ export default {
 
 
     //drawing
-    const canvasRef = ref(null);
     const ctx = ref(null);
     const redraw = (emit=false) => { emitter.emit('changeVideoFrame', [props.instanceID, page.value, id.value, lastFrame.value, emit]); };
     const draw = (videoPlayer, emit = true) => {
@@ -484,8 +507,6 @@ export default {
     onMounted(() => {
       ctx.value = canvasRef.value.getContext('2d');
       ctx.value.save();
-      canvasRef.value.width = width.value;
-      canvasRef.value.height = height.value;
 
       if(page.value == instanceRef.currentPage){
         props.targetData.current_state_id = props.start_state_id;
@@ -510,7 +531,7 @@ export default {
           const maxY = Math.max(...region.map(p => p.y));
           const pcutouts = parentCanvasRef.value.targetData.cutouts;
           pcutouts.push({
-            poly: utils.polyToPolyString(currentPolygonMask.value, 0, 0),
+            poly: currentPolygonMask.value,
             width: maxX-minX,
             height: maxY-minY,
             top: minY,
@@ -550,6 +571,8 @@ export default {
 
     
     const videoCanvas = {
+      utils,
+
       selected,
       dragStart,
       dragCurr,
@@ -565,6 +588,7 @@ export default {
       lastFrame,
       throttle,
       dragMode,
+      scale,
       //refs
       loomVideoCanvasRefs,
       componentRefs,
@@ -576,14 +600,19 @@ export default {
       currentTargets,
       id,
       page,
+      mode,
       width,
+      scaledWidth,
       height,
+      scaledHeight,
       top,
       left,
       parentCanvasRef,
       currentPolygonMaskID,
       currentPolygonMask,
+      currentPolygonMaskScaled,
       currentPolygonMaskString,
+      currentPolygonMaskStringScaled,
       regionExists,
       dragSelectStyle,
       //methods

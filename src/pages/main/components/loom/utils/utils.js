@@ -25,6 +25,12 @@ function objectFilter(obj, fn){
   return ret;
 }
 
+function ObjectToArray(obj){
+  const arr = [];
+  Object.keys(obj).forEach(k => arr[k] = obj[k]);
+  return arr;
+}
+
 function arrayToObject(arr){
   const obj = {};
   arr.forEach((el, i) => obj[i] = el);
@@ -107,7 +113,7 @@ function absdiff(img1, img2){
 }
 
 function scalePolygon(poly, scale){
-  poly.forEach(p => {p.x *= scale.x; p.y *= scale.y});
+  return poly.map(p => ({x: p.x*scale.x,  y: p.y*scale.y}));
 }
 
 function polyToPath2D(poly){
@@ -125,8 +131,8 @@ function polyToPolyString(poly, minX, minY){
   if(minY === undefined) minY = Math.min(...poly.map(p => p.y));
   let polyString = ''
   poly.forEach((p, i) => {
-    polyString += p.x - minX + "," + (p.y - minY);
-    if (i !== poly.length - 1) polyString += " ";
+    polyString += (p.x - minX).toPrecision(4) + "," + (p.y - minY).toPrecision(4);
+    if (i !== poly.length - 1) polyString += ' ';
   });
   return polyString;
 }
@@ -187,6 +193,7 @@ export default {
   //generic utils
   objectFilter,
   arrayToObject,
+  ObjectToArray,
   shallowCopy,
   shallowCopyPrimitivesOnly,
   deepCopy,

@@ -1,6 +1,7 @@
+import utils from '../utils/utils.js'
 
 const mixin = {
-  props: ['parent', 'targetData', 'showHint', 'interactable', 'current_state', 'targets'],
+  props: ['parent', 'vcTargetData', 'targetData', 'showHint', 'interactable', 'current_state', 'targets'],
   emits: ['changeState', 'addHistory'],
   name: 'loomComponent',
   data: function(){
@@ -16,7 +17,8 @@ const mixin = {
     page(){ return this.$parent.page; },
     vcid(){ return this.$parent.id; },
     id(){ return this.targetData.id; },
-    frame(){ return this.targetData.id; },
+    scale(){ return this.vcTargetData.scale || {x: 1.0, y: 1.0}; },
+    frame(){ return this.targetData.frame_no; },
     componentID(){ return `${this.instanceID}-${this.page}-${this.vcid}-${this.id}` },
     calcHintStyle(){
       return {
@@ -26,37 +28,30 @@ const mixin = {
       };
     },
     calcStyle(){
-      let target = this.targetData;
-      let w,
-        h,
-        topOffset,
-        leftOffset,
-        polyString = "";
+      const target = this.targetData;
+      let polyString = '';
+      const polyArr = utils.ObjectToArray(target.shape.points);
+      const poly = utils.scalePolygon(polyArr, this.scale);
+
+      const min_x = target.shape.dimensions.min_x*this.scale.x;
+      const min_y = target.shape.dimensions.min_y*this.scale.y;
+      const max_x = target.shape.dimensions.max_x*this.scale.x;
+      const max_y = target.shape.dimensions.max_y*this.scale.y;
       
-      let minX = target.shape.dimensions.min_x;
-      let minY = target.shape.dimensions.min_y;
-      let maxX = target.shape.dimensions.max_x;
-      let maxY = target.shape.dimensions.max_y;
-
-      const len = Object.keys(target.shape.points).length;
-      Object.values(target.shape.points).forEach((p, i) => {
-        polyString += p.x - minX + "," + (p.y - minY);
-        if (i !== len - 1) polyString += " ";
+      const len = poly.length;
+      poly.forEach((p, i) => {
+        polyString += `${p.x-min_x},${p.y-min_y}`;
+        if(i !== len - 1) polyString += ' ';
       });
-
-      w = maxX - minX;
-      h = maxY - minY;
-      topOffset = minY;
-      leftOffset = minX;
-
       this.points = polyString;
-      return {
+      const ret = {
         position: "absolute",
-        top: topOffset + 'px',
-        left: leftOffset + 'px',
-        width: w + 'px',
-        height: h + 'px',
+        top:    `${parseInt(min_y)}px`,
+        left:   `${parseInt(min_x)}px`,
+        width:  `${parseInt(max_x-min_x)}px`,
+        height: `${parseInt(max_y-min_y)}px`,
       };
+      return ret;
     },
   },
   
@@ -78,17 +73,6 @@ const mixin = {
       }
     },
   },
-
-  
-
-  
-
-  /*methods: {
-    highlight(){
-      //TODO
-      console.log('TODO: highlighting!');
-    },
-  },*/
 }
 
 export default mixin;
