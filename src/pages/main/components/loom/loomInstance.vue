@@ -206,7 +206,7 @@ export default {
               const maxY = Math.max(...region.map(p => p.y));
               const pcutouts = pc.targetData.cutouts;
               pcutouts.push({
-                poly: utils.polyToPolyString(region, 0, 0),
+                poly: region,
                 width: maxX-minX,
                 height: maxY-minY,
                 top: minY,
