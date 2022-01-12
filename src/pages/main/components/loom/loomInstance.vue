@@ -185,12 +185,12 @@ export default {
               linkData.linkedCanvases.merge(linkFromName, linkToName);
             } else {
               for(const frame of lf.frames){
-                ld.frame = frame[0];
-                lf.frame = frame[1];
-                const linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_${ld.frame}`;
-                const linkToName   = `${lf.instance}_${lf.page}_${lf.vcid}_${lf.frame}`;
-                if(!linkData.linkedCanvases.exists(linkFromName))  linkData.linkedCanvases.add(linkFromName, ld);
-                if(!linkData.linkedCanvases.exists(linkToName  ))  linkData.linkedCanvases.add(linkToName  , lf);
+                const ldc = {...ld, frame: frame[0]};
+                const lfc = {...lf, frame: frame[1]};
+                const linkFromName = `${ldc.instance}_${ldc.page}_${ldc.vcid}_${ldc.frame}`;
+                const linkToName   = `${lfc.instance}_${lfc.page}_${lfc.vcid}_${lfc.frame}`;
+                if(!linkData.linkedCanvases.exists(linkFromName))  linkData.linkedCanvases.add(linkFromName, ldc);
+                if(!linkData.linkedCanvases.exists(linkToName  ))  linkData.linkedCanvases.add(linkToName  , lfc);
                 linkData.linkedCanvases.merge(linkFromName, linkToName);
               }
             }

@@ -167,7 +167,6 @@ export default {
             page: component.page,
             vcid: component.vcid,
             frame: component.frame,
-            el, state,
           }];
         }).filter(ld => ld != null));
         this.manager.regionSelect.value = true;
