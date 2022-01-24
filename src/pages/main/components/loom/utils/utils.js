@@ -5,8 +5,7 @@ function currentTargets(current_state, targets){
      target.id != '-1' && 
      (
       isChild(current_state, target) ||
-      isSibling(targets, target, current_state) ||
-      target.parent_id == '-1'
+     (current_state.deactivateOnTransition !== true && isSibling(targets, target, current_state))
     ) || target.important;
   });
   return cts;

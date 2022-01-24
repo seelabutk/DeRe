@@ -488,7 +488,7 @@ export default {
 
     //components
     const componentRefs = reactive({});
-    const current_state = computed(() => { return Object.values(props.targets).find(t => t.id == props.targetData.current_state_id) || Object.values(props.targets)[1]; });
+    const current_state = computed(() => { return Object.values(props.targets).find(t => t.id == props.targetData.current_state_id) || Object.values(props.targets).sort((a,b) => a.frame_no - b.frame_no)[0]; });
     const currentTargets = computed(() => { return utils.currentTargets(current_state.value, props.targets); });
     const getComponent = (target) => {
       if(target.id == '-1') return undefined;
