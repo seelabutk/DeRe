@@ -508,7 +508,7 @@ export default {
       ctx.value = canvasRef.value.getContext('2d');
       ctx.value.save();
 
-      if(page.value == instanceRef.currentPage && props.start_state && props.start_state.id !== undefined){
+      if(page.value == instanceRef.currentPage && props.start_state_id !== undefined){
         props.targetData.current_state_id = props.start_state_id;
       }
       if(current_state.value !== undefined){
