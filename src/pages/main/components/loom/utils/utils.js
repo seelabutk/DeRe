@@ -182,7 +182,16 @@ function throttle (callback, limit, id=0) {
       }, limit);
     }
   }
+}
 
+function getComponentFromPoint(manager, x, y){
+  const els = document.elementsFromPoint(x, y);
+  const el = els.find(el => el.id != '');
+  if(el === undefined)  return null;
+  const id = el.id;
+  const component = manager.activeComponents.value[id];
+  if(component === undefined || !component.isLoomComponent) return null;
+  return component;
 }
 
 export default {
@@ -211,4 +220,7 @@ export default {
   //js utils
   sleep,
   throttle,
+
+  //component
+  getComponentFromPoint,
 }

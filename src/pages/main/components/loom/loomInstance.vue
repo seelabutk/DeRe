@@ -177,13 +177,13 @@ export default {
               page: vc.page,
               vcid: vc.id,
             };
-            if(lf.instance == ld.instance){
+            /*if(lf.instance == ld.instance){
               const linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_all`;
               const linkToName   = `${lf.instance}_${lf.page}_${lf.vcid}_all`;
               if(!linkData.linkedCanvases.exists(linkFromName))  linkData.linkedCanvases.add(linkFromName, ld);
               if(!linkData.linkedCanvases.exists(linkToName  ))  linkData.linkedCanvases.add(linkToName  , lf);
               linkData.linkedCanvases.merge(linkFromName, linkToName);
-            } else {
+            } else {*/
               for(const frame of lf.frames){
                 const ldc = {...ld, frame: frame[0]};
                 const lfc = {...lf, frame: frame[1]};
@@ -193,7 +193,7 @@ export default {
                 if(!linkData.linkedCanvases.exists(linkToName  ))  linkData.linkedCanvases.add(linkToName  , lfc);
                 linkData.linkedCanvases.merge(linkFromName, linkToName);
               }
-            }
+            // }
           }
           if(vc.parentCanvas && vc.parentCanvas != '-1'){
             const pc = loomVideoCanvasRefs[vc.parentCanvas];
@@ -406,7 +406,10 @@ export default {
       const fn = pasteBin.startupFn;
       const copy = utils.deepCopy(pasteBin);
       copy.startupFn = (c) => { c.updateParentCurrentState = false; if(fn) fn(c);}
-      copy.id = String(Object.keys(currentVideoTargets.value).length);
+      copy.id = "0"
+      while(currentVideoTargets.value[copy.id] !== undefined){
+        copy.id = String(parseInt(copy.id) + 1);
+      }
       currentVideoTargets.value[copy.id] = copy
     };
 

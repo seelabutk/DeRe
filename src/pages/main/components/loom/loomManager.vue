@@ -257,19 +257,27 @@ export default {
     const activeComponents = ref([]);
     const addComponent = ([name, component]) => { activeComponents.value[name] = component };
     const removeComponent = (name) => { delete activeComponents[name]; };
+    const componentClicked = (e) => { return utils.getComponentFromPoint(manager, e.x, e.y); };
 
 
     /*********Video Canvas*********/
     const currVideoCanvasSelected = ref(null);
-    const videoCanvasClicked = () => {
-      if(linkData.linkMode === 'linkingFrom') {
-        linkData.firstLink = createLinkEntry(currVideoCanvasSelected.value);
-        linkData.linkMode = 'linkingTo';
-      }
-      else if(linkData.linkMode === 'linkingTo'){
-        const ld = createLinkEntry(currVideoCanvasSelected.value);
-        createLink(linkData.firstLink, ld);
-        linkData.linkMode = 'selectable';
+    const videoCanvasClicked = (e) => {
+      if(linkData.linkMode !== 'selectable') {
+        regionSelect.value = false;
+        nextTick(() => {
+          const component = componentClicked(e);
+          if(linkData.linkMode === 'linkingFrom') {
+            linkData.firstLink = createLinkEntry(currVideoCanvasSelected.value, component);
+            linkData.linkMode = 'linkingTo';
+          }
+          else if(linkData.linkMode === 'linkingTo'){
+            const ld = createLinkEntry(currVideoCanvasSelected.value, component);
+            createLink(linkData.firstLink, ld);
+            linkData.linkMode = 'selectable';
+          }
+          regionSelect.value = true;
+        });
       }
     };
     const newVideoTarget = async (obj=null, mode=undefined, clear=true) => {
@@ -285,21 +293,31 @@ export default {
       selectModeRef.value.checked = false;
       regionOrigin.value.cutSelectedRegion();
     };
-    const changeVideoFrame = (instance, page, vcid, frame, emit) => {
+    const changeVideoFrame = (instance, page, vcid, lastFrame, frame, emit) => {
       if(linkData.linkedCanvases.exists(`${instance}_${page}_${vcid}_${frame}`)){ //per-frame links
+        const rets = [];  
         linkData.linkedCanvases.of(`${instance}_${page}_${vcid}_${frame}`).forEach(d => {
-          appRefs[d.instance].changeVideoFrame(d.page, d.vcid, d.frame, emit);
+          if(d.componentID === undefined){
+            if(appRefs[d.instance]){
+              appRefs[d.instance].changeVideoFrame(d.page, d.vcid, d.frame, emit);
+              rets.push({instance: d.instance, page: d.page, vcid: d.vcid});
+            } 
+          }
         });
-      } else if(linkData.linkedCanvases.exists(`${instance}_${page}_${vcid}_all`)){ //instance links (all frames linked) 
+        return rets;
+      } /*else if(linkData.linkedCanvases.exists(`${instance}_${page}_${vcid}_all`)){ //instance links (all frames linked) 
         linkData.linkedCanvases.of(`${instance}_${page}_${vcid}_all`).forEach(d => {
           if(appRefs[d.instance] && d.instance === instance){
             appRefs[d.instance].changeVideoFrame(d.page, d.vcid, frame, emit);
           }
         });
-      } else { //no link, just update current instance's vcid's frame
+      }*/ else { //no link, just update current instance's vcid's frame
+        const rets = [];
         if(appRefs[instance]){
           appRefs[instance].changeVideoFrame(page, vcid, frame, emit);
+          rets.push({instance, page, vcid});
         }
+        return rets;
       }
     };
 
@@ -310,22 +328,37 @@ export default {
       firstLink: null,
       linkedCanvases: new DSet(),
     });
-    const createLinkEntry = (vc) => ({
-      mode: vc.renderMode.value,
-      instance: vc.instanceID,
-      page: vc.page,
-      vcid: vc.id,
-      frame: vc.lastFrame
-    });
+    const createLinkEntry = (vc, component) => {
+      let ret = null;
+      if(component === null || component === undefined){
+        ret = {
+          mode: vc.renderMode.value,
+          instance: vc.instanceID,
+          page: vc.page,
+          vcid: vc.id,
+          frame: vc.lastFrame,
+        }
+      } else {
+        ret = {
+          mode: vc.renderMode.value,
+          instance: vc.instanceID,
+          page: vc.page,
+          vcid: vc.id,
+          frame: component.frame,
+          componentID: component.componentID,
+        }
+      }
+      return ret;
+    };
     const createLink = (fl, ld) => {
       let linkFromName, linkToName;
-      if(fl.instance === ld.instance){//instance linking - all frames linked
+      /* if(fl.instance === ld.instance){//instance linking - all frames linked
         linkToName = `${fl.instance}_${fl.page}_${fl.vcid}_all`;
         linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_all`;
-      } else { //frame linking - only one frame linked - cross-instance
+      } else { */ //frame linking - only one frame linked - cross-instance
         linkToName = `${fl.instance}_${fl.page}_${fl.vcid}_${fl.frame}`;
         linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_${ld.frame}`;
-      }
+      // }
       if(!linkData.linkedCanvases.exists(linkToName))    linkData.linkedCanvases.add(linkToName, fl);
       if(!linkData.linkedCanvases.exists(linkFromName))  linkData.linkedCanvases.add(linkFromName, ld);
       linkData.linkedCanvases.merge(linkToName, linkFromName);  
@@ -445,7 +478,7 @@ export default {
         regionOrigin.value = e.origin;
       });
       emitter.on("clickVideoCanvas", videoCanvasClicked);
-      emitter.on("selectVideoCanvas", vc => currVideoCanvasSelected.value = vc );
+      emitter.on("selectVideoCanvas", vc => { currVideoCanvasSelected.value = vc });
       emitter.on('changeVideoFrame', t => changeVideoFrame(...t));
       emitter.on('addComponent', addComponent);
       emitter.on('removeComponet', removeComponent);

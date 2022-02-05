@@ -154,13 +154,7 @@ export default {
       this.manager.regionSelect.value = false;
       return await this.$nextTick(() => {
         const linkFroms = Object.fromEntries(Object.entries(this.getRelativeStateCenters()).map(([state, loc]) => {
-          const els = document.elementsFromPoint(...Object.values(loc));
-          const el = els.find(el => el.id != '');
-          if(el === undefined)  return null;
-          const id = el.id;
-          
-          const component = this.manager.activeComponents.value[id];
-          if(component === undefined || !component.isLoomComponent) return null;
+          const component = utils.getComponentFromPoint(manager, ...Object.values(loc));
           return [state, {
             mode: component.renderMode,
             instance: component.instanceID,

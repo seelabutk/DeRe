@@ -14,7 +14,7 @@
         left: left + 'px',
         clipPath: `url(#clipping-${instanceID}-${id})`,
       }"
-      @click=" dragging=false; emitter.emit('clickVideoCanvas'); "
+      @click="e => {dragging=false; emitter.emit('clickVideoCanvas', e); }"
       @mousedown="onVideoMouseDown"
       @mouseleave="dragging=false"
     >
@@ -116,6 +116,7 @@ export default {
     const id = computed(() => { return props.targetData.id; });
     const page = computed(() => { return props.targetData.page; });
     const mode = computed(() => { return props.renderAppMode; }); 
+    const instance = computed(() => { return props.instanceID; });
     const width = computed(() => { return props.targetData.width || props.info.window.width; });
     const scaledWidth = computed(() => { return width * scale.x; });
     const height = computed(() => { return props.targetData.height || props.info.window.height; });
@@ -478,10 +479,17 @@ export default {
     const changeStateWithFrameNo = (frame, offset=0, changeParent=true, emit=true) => {
       const actualFrame = frame + 1 + offset;
       if(lastFrame.value == actualFrame) return;
-      lastFrame.value = actualFrame;
-      if(changeParent && updateParentCurrentState.value) instanceRef.changeStateWithFrameNo(frame, offset);
-      props.targetData.current_state_id = Object.values(props.targets).find(o => o.frame_no == frame).id;
-      redraw(emit);
+      //1. get our would-be new state
+      const newState = Object.values(props.targets).find(o => o.frame_no == frame);
+      //2. attempt frame change to new state
+      const updatedFrames = emitter.emit('changeVideoFrame', [props.instanceID, page.value, id.value, lastFrame.value, actualFrame, emit])[0];
+      const changed = updatedFrames.some(v => v.instance == instance.value && v.page == page.value && v.vcid == id.value);
+      //3. based on if frame was actually changed, update our current state
+      if(changed){
+        lastFrame.value = actualFrame;
+        if(changeParent && updateParentCurrentState.value) instanceRef.changeStateWithFrameNo(frame, offset);
+        props.targetData.current_state_id = Object.values(props.targets).find(o => o.frame_no == frame).id;
+      }
     };
     const addHistory = (t, e) => { instanceRef.updateInteractionHistory(t, e, props.targetData.id); };
 
@@ -601,6 +609,7 @@ export default {
       id,
       page,
       mode,
+      instance,
       width,
       scaledWidth,
       height,

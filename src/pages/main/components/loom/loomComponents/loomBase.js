@@ -18,7 +18,7 @@ const mixin = {
     vcid(){ return this.$parent.id; },
     id(){ return this.targetData.id; },
     scale(){ return this.vcTargetData.scale || {x: 1.0, y: 1.0}; },
-    frame(){ return this.targetData.frame_no; },
+    frame(){ return this.targetData.frame_no + 1; },
     componentID(){ return `${this.instanceID}-${this.page}-${this.vcid}-${this.id}` },
     calcHintStyle(){
       return {
