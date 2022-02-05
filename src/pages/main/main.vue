@@ -17,7 +17,7 @@ export default {
   },
   data: function(){
     const baseURL = 'https://raw.githubusercontent.com/branson2015/DeRe_Apps/main';
-    const apps = ['tableau', 'nytimes', 'median_household_income_2018', 'median_household_income_2019', 'COVID-19 Affects on School Finances', 'state_facts_for_students'];
+    const apps = ['tableau', 'nytimes', 'median_household_income_2018', 'median_household_income_2019', 'COVID-19 Affects on School Finances', 'state_facts_for_students', '2019_Poverty_Rate', 'Census_Engagement'];
     return {
       directories: apps.map(app => `${baseURL}/${app}`),
     };
