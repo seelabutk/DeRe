@@ -483,7 +483,7 @@ export default {
       emitter.on('addComponent', addComponent);
       emitter.on('removeComponet', removeComponent);
       props.directories.forEach(d => {
-        const appName = d.split('/').filter(t => t != '').slice(-1)[0];
+        const appName = d.split('/').filter(t => t != '').slice(-1)[0].replaceAll(' ', '_');
         appModes.push({
           directory: d,
           label: appName.charAt(0).toUpperCase() + appName.slice(1),
