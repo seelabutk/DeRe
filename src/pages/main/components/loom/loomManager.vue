@@ -1,13 +1,16 @@
 <template>
   <div ref="managerRef">
 
-    <div id="loom-menu" :style="{
-      position: 'absolute',
-      width: loomMenuWidth,
-      height: 'auto',
-      top: '150px',
-      left: '0px',
-    }">
+    <div v-show="editMode"
+      id="loom-menu" 
+      :style="{
+        position: 'absolute',
+        width: loomMenuWidth,
+        height: 'auto',
+        top: '150px',
+        left: '0px',
+      }"
+    >
       <span class="title">Loom</span>
 
       <div>
@@ -452,6 +455,7 @@ export default {
     
 
     /*******Initialization********/
+    const editMode = ref(false);
     const current_state = ref(null);
     const appModeRef = ref(null);
     const renderModeRef = ref(null);
@@ -471,6 +475,9 @@ export default {
       });
     };
     onMounted(() => {
+
+      if(window.location.hash.substr(1) === 'Edit') editMode.value = true;
+
       window.app = manager;
       const emitter = inject("emitter");
       emitter.on("regionExists", e => {
@@ -503,6 +510,7 @@ export default {
 
     const manager = {
       //modes
+      editMode,
       appModes,
       renderModes,
       //state

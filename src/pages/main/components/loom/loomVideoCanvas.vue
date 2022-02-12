@@ -537,15 +537,17 @@ export default {
           const maxX = Math.max(...region.map(p => p.x));
           const minY = Math.min(...region.map(p => p.y));
           const maxY = Math.max(...region.map(p => p.y));
-          const pcutouts = parentCanvasRef.value.targetData.cutouts;
-          pcutouts.push({
-            poly: currentPolygonMask.value,
-            width: maxX-minX,
-            height: maxY-minY,
-            top: minY,
-            left: minX,
-            id: props.targetData.id,
-          });
+          if(parentCanvasRef.value){
+            const pcutouts = parentCanvasRef.value.targetData.cutouts;
+            pcutouts.push({
+              poly: currentPolygonMask.value,
+              width: maxX-minX,
+              height: maxY-minY,
+              top: minY,
+              left: minX,
+              id: props.targetData.id,
+            });
+          }
         }
       }
       if(props.targetData.startupFn) {
