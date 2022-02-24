@@ -105,7 +105,7 @@
         <!-- LINK TARGET - push once for enable linking, again to complete linking !-->
         <div style='grid-area: link' :style="linkVideoCanvasStyle">
           <span class="text">{{linkData.linkMode == 'linkingFrom' ? 'linking' : linkData.linkMode == 'linkingTo' ? 'link to' : 'link'}}</span> <br>
-          <font-awesome-icon icon="link" @click="() => { if(linkData.linkMode == 'selectable') linkData.linkMode = 'linkingFrom' }"/>
+          <font-awesome-icon icon="link" @click="() => { linkData.linkMode = linkData.linkMode == 'selectable' ? 'linkingFrom' : 'selectable' }"/>
         </div>
         
         <!-- linked frames map region !-->
@@ -249,8 +249,10 @@ export default {
         return;
       }
       appConfig.value = JSON.parse(localStorage.getItem(loadName));
-      current_state.value = appConfig.value['startState']['current_state'];
-      appMode.value = appConfig.value['startState']['appMode'];
+      if(appConfig.value['startState'] && appConfig.value['startState']['current_state']){
+        current_state.value = appConfig.value['startState']['current_state'];
+        appMode.value = appConfig.value['startState']['appMode'];
+      }
       // delete appConfig.value['startState'];
       init();
     };
@@ -564,6 +566,7 @@ export default {
       helpToggleRef,
       selectModeRef,
       appRefs,
+      utils,
     };
     provide('manager', manager)
     return manager;

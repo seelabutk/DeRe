@@ -186,9 +186,16 @@ function throttle (callback, limit, id=0) {
 
 function getComponentFromPoint(manager, x, y){
   const els = document.elementsFromPoint(x, y);
-  const el = els.find(el => el.id != '');
+  const el = els.find(el => el.nodeName == 'polygon');
   if(el === undefined)  return null;
-  const id = el.id;
+  if(el.isPointInFill){
+    const bcr = el.getBoundingClientRect();
+    const svgPoint = el.parentElement.createSVGPoint(); //supposed to use DOMPoint, but this is currently broken in chrome.
+    svgPoint.x = x - bcr.left;
+    svgPoint.y = y - bcr.top;
+    if(!el.isPointInFill(svgPoint)) return null;
+  }
+  const id = el.parentElement.parentElement.id;
   const component = manager.activeComponents.value[id];
   if(component === undefined || !component.isLoomComponent) return null;
   return component;
