@@ -2,9 +2,40 @@
   <div ref="managerRef">
 
     <div v-show="editMode"
+      id="loom-menu-linking"
+      :style="{
+        position: 'fixed',
+        width: '100%',
+        height: '100px',
+        bottom: '0px',
+        margin: '0 auto',
+      }"
+    >
+      <div
+        style="width: 80%; height: 100%; margin: 0 auto; background-color: rgb(45,45,45); border-radius: 10px 10px 0 0"
+      >
+        <span class="title">Linking</span>
+      </div>
+    </div>
+
+    <div v-show="editMode"
+      id="loom-menu-tools"
+      :style="{
+        position: 'fixed',
+        width: loomMenuWidth,
+        height: 'auto',
+        top: '150px',
+        right: '0px',
+      }"
+    >
+      <span class="title">Tools</span>
+      ...
+    </div>
+
+    <div v-show="editMode"
       id="loom-menu" 
       :style="{
-        position: 'absolute',
+        position: 'fixed',
         width: loomMenuWidth,
         height: 'auto',
         top: '150px',
@@ -576,13 +607,23 @@ export default {
 
 <style src="@vueform/multiselect/themes/default.css"></style>
 <style scoped>
-#loom-menu {
+  #loom-menu{
     border-radius: 0 10px 10px 0;
     background-color: rgb(45,45,45);
     width: 120px;
     height: 100%; 
     z-index: 10000;
-    position: absolute;
+    position: fixed;
+    text-align: center;
+  }
+
+  #loom-menu-tools{
+    border-radius: 10px 0 0 10px;
+    background-color: rgb(45,45,45);
+    width: 120px;
+    height: 100%;
+    z-index: 100000;
+    position: fixed;
     text-align: center;
   }
 
