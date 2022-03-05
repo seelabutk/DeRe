@@ -154,7 +154,8 @@ export default {
       this.manager.regionSelect.value = false;
       return await this.$nextTick(() => {
         const linkFroms = Object.fromEntries(Object.entries(this.getRelativeStateCenters()).map(([state, loc]) => {
-          const component = utils.getComponentFromPoint(manager, ...Object.values(loc));
+          const component = utils.getComponentFromPoint(this.manager, ...Object.values(loc));
+          if(component === null)  return null;
           return [state, {
             mode: component.renderMode,
             instance: component.instanceID,
