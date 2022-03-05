@@ -1,5 +1,8 @@
 <template>
-  <div ref="containerRef" style="height: 0px; width: 0px; pointer-events: auto;">
+  <div ref="containerRef" 
+    style="height: 0px; width: 0px; pointer-events: auto;"
+    :style="{zIndex: zIndex}"
+  >
     <!-- videoCanvas polygon mask !-->
     <svg pointer-events="none">
       <clipPath :id="`clipping-${instanceID}-${targetData.id}`">
@@ -27,6 +30,7 @@
           :style="{
             width: (width*scale.x).toPrecision(4) + 'px',
             height: (height*scale.y).toPrecision(4) + 'px',
+            zIndex: zIndex,
           }"
         />
         <!-- drag selection !-->
@@ -109,6 +113,7 @@ export default {
 
 
     //videoCanvas data
+    const zIndex = ref(100);
     const scale = ref({ x: 1.0, y: 1.0 }); 
     const containerRef = ref(null);
     const canvasRef = ref(null);
@@ -583,6 +588,7 @@ export default {
     const videoCanvas = {
       utils,
 
+      zIndex,
       selected,
       dragStart,
       dragCurr,

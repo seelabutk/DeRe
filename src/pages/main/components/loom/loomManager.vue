@@ -3,18 +3,36 @@
 
     <div v-show="editMode"
       id="loom-menu-linking"
-      :style="{
-        position: 'fixed',
-        width: '100%',
-        height: '100px',
-        bottom: '0px',
-        margin: '0 auto',
-      }"
+      style="position: fixed; width: 100%; height: 80px; bottom: 0px; margin: 0 auto;"
     >
-      <div
-        style="width: 80%; height: 100%; margin: 0 auto; background-color: rgb(45,45,45); border-radius: 10px 10px 0 0"
-      >
-        <span class="title">Linking</span>
+      <div>
+        <span class="title" style='grid-column: 1/-1'>Linking</span>
+        <div style="grid-column: 1">
+          <input 
+            ref="helpToggleRef"
+            @click="toggleHintHelp"
+            type="checkbox"
+            class="sidebar-toggle apple-switch btn btn-default"
+            style="height: 20px; width: 40px !important;"
+          /><br>
+          <span>Hints</span>
+        </div>
+
+        <!-- linked frames map region !-->
+        <div style='grid-column: 2; margin: 5px 0;' :style="mapLinkStyle">
+          <font-awesome-icon icon='map' @click="mapLinkClicked"/> <br>
+          <span>link map</span>
+        </div>
+
+        <!-- LINK TARGET - push once for enable linking, again to complete linking !-->
+        <div style='grid-column: 3; margin: 5px 0;' :style="linkVideoCanvasStyle">
+          <font-awesome-icon icon="link" @click="() => { linkData.linkMode = linkData.linkMode == 'selectable' ? 'linkingFrom' : 'selectable' }"/><br>
+          <span>{{linkData.linkMode == 'linkingFrom' ? 'linking' : linkData.linkMode == 'linkingTo' ? 'link to' : 'link'}}</span> 
+        </div>
+
+        <!-- LINK INTERACTION !-->
+        
+        <!-- LINK ALL !-->
       </div>
     </div>
 
@@ -23,13 +41,86 @@
       :style="{
         position: 'fixed',
         width: loomMenuWidth,
-        height: 'auto',
         top: '150px',
         right: '0px',
       }"
     >
       <span class="title">Tools</span>
-      ...
+
+      <span class="text" style="margin-top: 0px;">Regions</span>
+      <input 
+        ref="regionToggleRef"
+        @click="toggleRegion"
+        type="checkbox"
+        class="sidebar-toggle apple-switch btn btn-default"
+      />
+
+      <div class='grid-container'>
+        <!-- reset the canvas and all cutouts for current target!-->
+        <!-- TODO: Fix !-->
+        <div style="grid-area: newCanvas" :class="regionSelect && false ? 'activeInput' : 'inactiveInput'">
+          <span class="text">Canvas</span> <br>
+          <font-awesome-icon icon="plus-square" @click="regionSelect && false ? newVideoTarget() : null"/>
+        </div>
+        
+        <!-- cut, copy & paste selected regions (only available when region has been selected) !-->
+        <div  style="grid-area: cutRegion" :class="regionSelect && regionExists ? 'activeInput' : 'inactiveInput'">
+          <span class="text">Region</span> <br>
+          <font-awesome-icon icon="border-none"  @click="e => regionSelect && regionExists ? cutRegion(e) : null"/>
+        </div>
+        
+        <!-- cut, copy but do not paste selected region (only available when region has been selected) !-->
+        <div stlye='grid-area: cut' :class="regionSelect && currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
+          <span class="text">Cut</span> <br>
+          <font-awesome-icon icon="cut" @click="e => regionSelect && currVideoCanvasSelected ? cut(e) : null"/>
+        </div>
+
+        <!-- copy, but do not paste region (only available when region has been selected) !-->
+        <div stlye='grid-area: copy' :class="regionSelect && currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
+          <span class="text">Copy</span> <br>
+          <font-awesome-icon icon="copy" @click="e => regionSelect && currVideoCanvasSelected ? copy(e) : null"/>
+        </div>
+
+        <!-- do not cut, copy and paste (only available when region has been selected) !-->
+        <div stlye='grid-area: dup' :class="regionSelect && currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
+          <span class="text">Duplicate</span> <br>
+          <font-awesome-icon icon="clone" @click="e => regionSelect && currVideoCanvasSelected ? duplicate(e) : null"/>
+        </div>
+        
+        <!-- paste videoTargetCanvas from clipboard !-->
+        <div style='grid-area: paste' :class="regionSelect && pasteBin ? 'activeInput' : 'inactiveInput'">
+          <span class="text">Paste</span> <br>
+          <font-awesome-icon icon="paste" @click="e => regionSelect && pasteBin ? paste(e) : null"/>
+        </div>
+
+        <!-- delete selected region (only available when videoTargetCanvas has been selected)!-->
+        <div stlye='grid-area: delete' :class="regionSelect && currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
+          <span class="text">Delete</span> <br>
+          <font-awesome-icon icon="trash" @click="e => regionSelect && currVideoCanvasSelected ? Delete(e) : null"/>
+        </div>
+
+        <!-- z-index up !-->
+        <div style='grid-area: upZ' :class="regionSelect && currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
+          <span class="text">Up</span> <br>
+          <font-awesome-icon icon="arrow-up" @click="e => regionSelect && currVideoCanvasSelected ? Up(e) : null"/>
+        </div>
+
+        <!-- z-index down !-->
+        <div style='grid-area: downZ' :class="regionSelect && currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
+          <span class="text">Down</span> <br>
+          <font-awesome-icon icon="arrow-down" @click="e => regionSelect && currVideoCanvasSelected ? Down(e) : null"/>
+        </div>
+
+      </div>
+
+      <span class="text" style="margin-top: 10px">Region Edit</span>
+      <input
+        ref="selectModeRef"
+        @click="()=>{dragMode=!dragMode; if(!dragMode) regionToggleRef.checked = true; regionSelect = true}"
+        type="checkbox"
+        class="sidebar-toggle apple-switch btn btn-default"
+      />
+
     </div>
 
     <div v-show="editMode"
@@ -37,19 +128,18 @@
       :style="{
         position: 'fixed',
         width: loomMenuWidth,
-        height: 'auto',
         top: '150px',
         left: '0px',
       }"
     >
-      <span class="title">Loom</span>
+      <span class="title">DeRe</span>
 
       <div>
         <font-awesome-icon icon="save" class="activeInput" @click="saveVideoCanvasState"/> &nbsp;
         <font-awesome-icon icon="file" class="activeInput" @click="loadVideoCanvasState"/>
       </div>
 
-      <span class="text">Mode</span>
+      <span class="text" style="margin-top: 40px;">Mode</span>
       <multiselect
         ref="renderModeRef" 
         v-model="renderMode"
@@ -60,99 +150,17 @@
         @change="onRenderModeChange"
       />
 
-      <span class="text">App</span>
+      <span class="text" style="margin-top: 40px;" >App</span>
       <multiselect 
         ref="appModeRef"
         v-model="appMode" 
         mode="tags" 
+        label='minLabel'
         :options="appModes"
         :searchable="true"
         :createTag="true"
         @change="onAppModeChange"
-      />
-
-      <span class="text">Regions:</span>
-      <input 
-        ref="regionToggleRef"
-        @click="toggleRegion"
-        type="checkbox"
-        class="sidebar-toggle apple-switch btn btn-default"
-      />
-
-      <div v-show="regionSelect" class="grid-container">
-        
-        <div style="grid-area: selectMode">
-          <span class="text">Region Edit</span>
-          <input
-            ref="selectModeRef"
-            @click="()=>dragMode=!dragMode"
-            type="checkbox"
-            class="sidebar-toggle apple-switch btn btn-default"
-          />
-        </div>
-
-        <!-- reset the canvas and all cutouts for current target!-->
-        <div style="grid-area: newCanvas" class='activeInput'>
-          <span class="text">Canvas</span> <br>
-          <font-awesome-icon icon="plus-square" style="color: white" @click="newVideoTarget"/>
-        </div>
-        
-        <!-- cut, copy & paste selected regions (only available when region has been selected) !-->
-        <div  style="grid-area: cutRegion" :class="regionExists ? 'activeInput' : 'inactiveInput'">
-          <span class="text">Region</span> <br>
-          <font-awesome-icon icon="border-none"  @click="e => regionExists ? cutRegion(e) : null"/>
-        </div>
-        
-        <!-- cut, copy but do not paste selected region (only available when region has been selected) !-->
-        <div stlye='grid-area: cut' :class="currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
-          <span class="text">Cut</span> <br>
-          <font-awesome-icon icon="cut" @click="e => currVideoCanvasSelected ? cut(e) : null"/>
-        </div>
-
-        <!-- copy, but do not paste region (only available when region has been selected) !-->
-        <div stlye='grid-area: copy' :class="currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
-          <span class="text">Copy</span> <br>
-          <font-awesome-icon icon="copy" @click="e => currVideoCanvasSelected ? copy(e) : null"/>
-        </div>
-
-        <!-- do not cut, copy and paste (only available when region has been selected) !-->
-        <div stlye='grid-area: dup' :class="currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
-          <span class="text">Duplicate</span> <br>
-          <font-awesome-icon icon="clone" @click="e => currVideoCanvasSelected ? duplicate(e) : null"/>
-        </div>
-        
-        <!-- paste videoTargetCanvas from clipboard !-->
-        <div style='grid-area: paste' :class="pasteBin ? 'activeInput' : 'inactiveInput'">
-          <span class="text">Paste</span> <br>
-          <font-awesome-icon icon="paste" @click="e => pasteBin ? paste(e) : null"/>
-        </div>
-
-        <!-- delete selected region (only available when videoTargetCanvas has been selected)!-->
-        <div stlye='grid-area: delete' :class="currVideoCanvasSelected ? 'activeInput' : 'inactiveInput'">
-          <span class="text">Delete</span> <br>
-          <font-awesome-icon icon="trash" @click="e => currVideoCanvasSelected ? Delete(e) : null"/>
-        </div>
-
-        <!-- LINK TARGET - push once for enable linking, again to complete linking !-->
-        <div style='grid-area: link' :style="linkVideoCanvasStyle">
-          <span class="text">{{linkData.linkMode == 'linkingFrom' ? 'linking' : linkData.linkMode == 'linkingTo' ? 'link to' : 'link'}}</span> <br>
-          <font-awesome-icon icon="link" @click="() => { linkData.linkMode = linkData.linkMode == 'selectable' ? 'linkingFrom' : 'selectable' }"/>
-        </div>
-        
-        <!-- linked frames map region !-->
-        <div style='grid-area: mapRegion' :style="mapLinkStyle">
-          <span class="text">link map</span> <br>
-          <font-awesome-icon icon='map' @click="mapLinkClicked"/>
-        </div>
-
-      </div>
-
-      <span class="text">Hints:</span>
-      <input 
-        ref="helpToggleRef"
-        @click="toggleHintHelp"
-        type="checkbox"
-        class="sidebar-toggle apple-switch btn btn-default"
+        style="height: 50px;"
       />
     </div>
 
@@ -221,6 +229,8 @@ export default {
       appMode.value = v;
       init();
     };
+    const Up = () => { if(appRefs[currVideoCanvasSelected.value.instanceID]) appRefs[currVideoCanvasSelected.value.instanceID].Up(currVideoCanvasSelected.value); }
+    const Down = () => { if(appRefs[currVideoCanvasSelected.value.instanceID]) appRefs[currVideoCanvasSelected.value.instanceID].Down(currVideoCanvasSelected.value); }
     const Delete = () => { if(appRefs[currVideoCanvasSelected.value.instanceID]) appRefs[currVideoCanvasSelected.value.instanceID].Delete(currVideoCanvasSelected.value); };
     const copy = () => { pasteBin.value = currVideoCanvasSelected.value; };
     const cut = () => { copy(); Delete(); };
@@ -526,7 +536,8 @@ export default {
         const appName = d.split('/').filter(t => t != '').slice(-1)[0].replaceAll(' ', '_');
         appModes.push({
           directory: d,
-          label: appName.charAt(0).toUpperCase() + appName.slice(1),
+          label: (appName.charAt(0).toUpperCase() + appName.slice(1)),
+          minLabel: (appName.charAt(0).toUpperCase() + appName.slice(1)).substr(0,4) + '...',
           value: appName,
         });
       });
@@ -582,6 +593,8 @@ export default {
       createLinkEntry,
       createLink,
       changeVideoFrame,
+      Up,
+      Down,
       Delete,
       copy,
       cut,
@@ -607,22 +620,47 @@ export default {
 
 <style src="@vueform/multiselect/themes/default.css"></style>
 <style scoped>
+
+  * > span{
+    color: #eee;
+  }
+
   #loom-menu{
     border-radius: 0 10px 10px 0;
     background-color: rgb(45,45,45);
     width: 120px;
-    height: 100%; 
-    z-index: 10000;
+    height: 400px; 
+    z-index: 100;
     position: fixed;
     text-align: center;
+  }
+
+  #loom-menu-linking{
+    z-index: 100;
+  }
+
+  #loom-menu-linking input:after {
+    width: 17px;
+    height: 17px;
+  }
+
+  #loom-menu-linking > div {
+    width: 30%; 
+    height: 100%; 
+    margin: 0 auto; 
+    background-color: rgb(45,45,45); 
+    border-radius: 10px 10px 0 0;
+    text-align: center;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
   }
 
   #loom-menu-tools{
     border-radius: 10px 0 0 10px;
     background-color: rgb(45,45,45);
     width: 120px;
-    height: 100%;
-    z-index: 100000;
+    height: 400px;
+    z-index: 100;
     position: fixed;
     text-align: center;
   }
@@ -630,12 +668,11 @@ export default {
   .grid-container {
     display: grid;
     grid-template-areas:
-      'selectMode selectMode'
       'newCanvas  cutRegion '
       'cut        copy      '
       'dup        paste     '
-      'delete     link      '
-      'mapRegion  mapRegion '
+      'delete     delete    '
+      'upZ        downZ     '
   }
 
   .grid-container > div {
@@ -686,7 +723,7 @@ export default {
 
   span.text {
     display: inline-block;
-    margin-top: 20px;
+    margin-top: 16px;
     margin-right: 10px;
     vertical-align: middle;
     color: #eee;
@@ -727,11 +764,6 @@ export default {
   input.apple-switch:checked:after {
     left: 20px;
     box-shadow: -2px 4px 3px rgba(0,0,0,0.05);
-  }
-
-  #miniMap {
-    margin-top: 10px;
-    border-radius: 5px;
   }
 
   .activeInput {

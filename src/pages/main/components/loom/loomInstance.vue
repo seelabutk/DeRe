@@ -169,8 +169,8 @@ export default {
           const instance = renderAppMode
           const lfs = vc.linkedFrames || [];
           for(const lf of lfs){
-            if(lf.mode != renderMode)
-              continue;
+            /* if(lf.mode != renderMode)
+              continue; */
             const ld = {
               mode: renderMode,
               instance: instance,
@@ -395,6 +395,12 @@ export default {
 
 
     //operations
+    const Up = (videoCanvas) => {
+      videoCanvas.zIndex++;
+    }
+    const Down = (videoCanvas) => {
+      videoCanvas.zIndex--;
+    }
     const Delete = (videoCanvas) => {
       let id = null;
       if(videoCanvas === null && currentVideoTargets.value !== null)  id = '-1';
@@ -454,6 +460,8 @@ export default {
       changeVideoFrame,
       createNewVideoPlayer,
       videoCacheModeChange,
+      Up,
+      Down,
       Delete,
       paste,
       //refs

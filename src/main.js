@@ -2,10 +2,10 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import mitt from 'mitt'
 import { library } from '@fortawesome/fontawesome-svg-core'
-import { faCopy, faTrash, faPlusSquare, faCut, faPaste, faBorderNone, faSave, faFile, faClone, faExpandArrowsAlt, faLink, faMap } from '@fortawesome/free-solid-svg-icons'
+import { faCopy, faTrash, faPlusSquare, faCut, faPaste, faBorderNone, faSave, faFile, faClone, faExpandArrowsAlt, faLink, faMap, faArrowUp, faArrowDown } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
-library.add(faCopy, faTrash, faPlusSquare, faCut, faPaste, faBorderNone, faSave, faFile, faClone, faExpandArrowsAlt, faLink, faMap);
+library.add(faCopy, faTrash, faPlusSquare, faCut, faPaste, faBorderNone, faSave, faFile, faClone, faExpandArrowsAlt, faLink, faMap, faArrowUp, faArrowDown);
 
 //customized mitt, emit has return type and added async emit
 const myMitt = (all) => {
