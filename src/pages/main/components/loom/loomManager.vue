@@ -192,7 +192,7 @@ import { ref, reactive, onMounted, computed, provide, inject, nextTick } from 'v
 
 export default {
   components: { loomInstance,  Multiselect },
-  props: ['directories'],
+  props: ['directories', 'modifier_directory'],
   
   setup(props, context){
     //globals
@@ -277,13 +277,13 @@ export default {
       }
     };
     const loadVideoCanvasState = () => {
-      let loadOptions = localStorage.getItem('saveNames');
+      let loadOptions = modifierFileNames.value; // localStorage.getItem('saveNames');
       if(!loadOptions){
         alert("No files to load");
         //todo: file upload
         return;
       }
-      loadOptions = JSON.parse(loadOptions)
+      // loadOptions = JSON.parse(loadOptions)
 
       function activate(ac){
         appConfig.value = ac;
@@ -305,7 +305,9 @@ export default {
         alert("File does not exist");
         return;
       } else {
-        activate(JSON.parse(localStorage.getItem(loadName)));
+        const index = loadOptions.indexOf(loadName);
+        const file = modifierFiles.value[index];
+        activate(file);
       }
     };
     function selectFile (){
@@ -517,9 +519,10 @@ export default {
         color: cmap[mapLinkData.mapLinkMode],
       };
     });
-    
 
     /*******Initialization********/
+    const modifierFiles = ref(null);
+    const modifierFileNames = ref(null);
     const editMode = ref(false);
     const current_state = ref(null);
     const appModeRef = ref(null);
@@ -539,9 +542,25 @@ export default {
         }
       });
     };
+    const getModifierFiles = function(url){
+      const queryUrl = 'https://api.github.com/repos/branson2015/DeRe_Apps/git/trees/main?recursive=1';
+      fetch(queryUrl).then(res => res.json()).then(json => {
+        const fileNames = json.tree.map(data => data.path).filter(path => path.substr(0,"demos/demos/".length) === "demos/demos/").map(file => file.substr("/demos/demos".length))
+        modifierFileNames.value = fileNames;
+        
+        const files = fileNames.map(file => fetch(`${props.modifier_directory}/${file}`).then(res => res.json()));
+        Promise.all(files).then(files => {
+          modifierFiles.value = files;
+        });
+      });
+    }
+
     onMounted(() => {
 
       if(window.location.hash.substr(1) === 'Edit') editMode.value = true;
+
+      getModifierFiles(props.modifier_directory);
+      
 
       window.app = manager;
       const emitter = inject("emitter");
