@@ -5737,7 +5737,7 @@
     "startState": {
         "saveName": "Sup",
         "appMode": [
-            "superstore"
+            "superstore_desktop"
         ],
         "current_state": 0
     }

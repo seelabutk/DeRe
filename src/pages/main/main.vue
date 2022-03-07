@@ -17,7 +17,7 @@ export default {
   },
   data: function(){
     const baseURL = 'https://raw.githubusercontent.com/branson2015/DeRe_Apps/main';
-    const apps = ['superstore', 'COVID-19 Affects on School Finances', 'state_facts_for_students', 'Public Elementary-Secondary School System Finances'];
+    const apps = ['COVID-19 Affects on School Finances', 'state_facts_for_students', 'Public Elementary-Secondary School System Finances'];
     return {
       directories: apps.map(app => `${baseURL}/${app}`),
     };

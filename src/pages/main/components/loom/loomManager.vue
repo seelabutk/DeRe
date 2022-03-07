@@ -160,7 +160,7 @@
         :searchable="true"
         :createTag="true"
         @change="onAppModeChange"
-        style="height: 50px;"
+        class='appModeMultiselect'
       />
     </div>
 
@@ -250,10 +250,10 @@ export default {
       if(appConfig.value['startState'] && appConfig.value['startState'].saveName)
         dflt = appConfig.value['startState'].saveName;
       let name = prompt(`Enter name to save config as: (default: ${dflt})`);
-      if(name == '' && dflt != 'None'){
+
+      if(name == ''){
+        if(!dflt || dflt == 'None')  return;
         name = dflt;
-      }else if(name == '') {
-        return;
       }
       const saveNames = new Set(JSON.parse(localStorage.getItem('saveNames'))) || new Set();
       if(saveNames.has(name)){
@@ -284,19 +284,41 @@ export default {
         return;
       }
       loadOptions = JSON.parse(loadOptions)
-      const loadName = prompt("Enter load file\n Available names: " + loadOptions.join(', '));
-      if(!loadOptions.some(lo => lo == loadName)){
+
+      function activate(ac){
+        appConfig.value = ac;
+        if(appConfig.value['startState'] && appConfig.value['startState']['current_state']){
+          current_state.value = appConfig.value['startState']['current_state'];
+          appMode.value = appConfig.value['startState']['appMode'].map(v => v.split().join('_'));
+          console.log(appMode.value);
+        }
+        init();
+      }
+
+      const loadName = prompt("Enter file (blank to upload)\n Available names: " + loadOptions.join(', '));
+      if(loadName === ''){
+        selectFile().then(f => {
+          activate(f);
+          saveVideoCanvasState();
+        });
+      } else if(!loadOptions.some(lo => lo == loadName)){
         alert("File does not exist");
         return;
+      } else {
+        activate(JSON.parse(localStorage.getItem(loadName)));
       }
-      appConfig.value = JSON.parse(localStorage.getItem(loadName));
-      if(appConfig.value['startState'] && appConfig.value['startState']['current_state']){
-        current_state.value = appConfig.value['startState']['current_state'];
-        appMode.value = appConfig.value['startState']['appMode'];
-      }
-      // delete appConfig.value['startState'];
-      init();
     };
+    function selectFile (){
+      return new Promise(resolve => {
+          let input = document.createElement('input');
+          input.type = 'file';
+          input.onchange = _ => {
+              let files = Array.from(input.files);
+              resolve(files[0]);
+          };
+          input.click();
+      });
+    }
 
 
     /*********Components*********/
@@ -620,6 +642,13 @@ export default {
 
 <style src="@vueform/multiselect/themes/default.css"></style>
 <style scoped>
+
+  .appModeMultiselect {
+    --ms-tag-py: 0;
+    --ms-tag-px: 0;
+    --ms-tag-my: 0;
+    --ms-tag-mx: 0;
+  }
 
   * > span{
     color: #eee;

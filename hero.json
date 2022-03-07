@@ -5456,5 +5456,14 @@
                 "processed": true
             }
         }
+    },
+    "startState": {
+        "saveName": "heroTest",
+        "appMode": [
+            "COVID-19_Affects_on_School_Finances",
+            "state_facts_for_students",
+            "Public_Elementary-Secondary_School_System_Finances"
+        ],
+        "current_state": 16
     }
 }
