@@ -484,12 +484,10 @@ export default {
     const changeStateWithFrameNo = (frame, offset=0, changeParent=true, emit=true) => {
       const actualFrame = frame + 1 + offset;
       if(lastFrame.value == actualFrame) return;
-      //1. get our would-be new state
-      const newState = Object.values(props.targets).find(o => o.frame_no == frame);
-      //2. attempt frame change to new state
+      //1. attempt frame change to new state
       const updatedFrames = emitter.emit('changeVideoFrame', [props.instanceID, page.value, id.value, lastFrame.value, actualFrame, emit])[0];
       const changed = updatedFrames.some(v => v.instance == instance.value && v.page == page.value && v.vcid == id.value);
-      //3. based on if frame was actually changed, update our current state
+      //2. based on if frame was actually changed, update our current state
       if(changed){
         lastFrame.value = actualFrame;
         if(changeParent && updateParentCurrentState.value) instanceRef.changeStateWithFrameNo(frame, offset);

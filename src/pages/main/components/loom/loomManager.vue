@@ -264,7 +264,7 @@ export default {
       appConfig.value['startState'] = {
         saveName: name,
         appMode: appMode.value,
-        current_state: current_state.value,
+        // current_state: current_state.value,
       };
       try{
         localStorage.setItem('saveNames', JSON.stringify([...saveNames]));
@@ -277,22 +277,31 @@ export default {
       }
     };
     const loadVideoCanvasState = () => {
-      let loadOptions = modifierFileNames.value; // localStorage.getItem('saveNames');
+      let loadOptions = new Set(modifierFileNames.value.map(v => v.split('.')[0]));
+      let localOptions = localStorage.getItem('saveNames');
+      if(localOptions){
+        localOptions = JSON.parse(localOptions);
+        localOptions.forEach(option => loadOptions.add(option));
+      }
+      
       if(!loadOptions){
         alert("No files to load");
         //todo: file upload
         return;
       }
-      // loadOptions = JSON.parse(loadOptions)
+
+      loadOptions = Array.from(loadOptions);
 
       function activate(ac){
         appConfig.value = ac;
-        if(appConfig.value['startState'] && appConfig.value['startState']['current_state']){
-          current_state.value = appConfig.value['startState']['current_state'];
+        // if(appConfig.value['startState'] && appConfig.value['startState']['current_state'])
+        //   current_state.value = appConfig.value['startState']['current_state'];
+        if(appConfig.value['startState'] && appConfig.value['startState']['appMode'])
           appMode.value = appConfig.value['startState']['appMode'].map(v => v.split().join('_'));
-          console.log(appMode.value);
-        }
         init();
+        nextTick(() => {
+          
+        });
       }
 
       const loadName = prompt("Enter file (blank to upload)\n Available names: " + loadOptions.join(', '));
@@ -307,7 +316,8 @@ export default {
       } else {
         const index = loadOptions.indexOf(loadName);
         const file = modifierFiles.value[index];
-        activate(file);
+        if(file)  activate(file);
+        else      activate(JSON.parse(localStorage.getItem(loadName)));
       }
     };
     function selectFile (){
@@ -524,7 +534,7 @@ export default {
     const modifierFiles = ref(null);
     const modifierFileNames = ref(null);
     const editMode = ref(false);
-    const current_state = ref(null);
+    // const current_state = ref(null);
     const appModeRef = ref(null);
     const renderModeRef = ref(null);
     const appRefs = reactive({});
@@ -611,7 +621,7 @@ export default {
       linkData,
       mapLinkData,
       appConfig,
-      current_state,
+      // current_state,
       loomMenuWidth,
       activeComponents,
       //computed

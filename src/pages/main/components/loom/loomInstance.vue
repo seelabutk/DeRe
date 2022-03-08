@@ -128,7 +128,7 @@ export default {
     const load = () => {
       if(loaded.value) return Promise.resolve([config, appConfig.value]);
       return Promise.all([
-        fetch(props.directory + '/' + props.config_filename).then(res => res.text()).then(config => JSON.parse(config)),
+        fetch(props.directory + '/' + props.config_filename).then(res => res.text()).then(config => JSON.parse(config)).catch(e => null),
         fetch(props.directory + '/' + props.vtc_filename)   .then(res => res.text()).then(vtc    => JSON.parse(vtc   )).catch(e => null)
       ]).then(([nconfig, vtc]) => {
         if(nconfig.info['version'] != loomConfig['version']){
@@ -153,8 +153,15 @@ export default {
         init_videoTargetCache(vtc, m.value, m.renderMode);
         videoCacheModeChange(renderAppMode.value);
 
-        current_state.value = Object.values(targets.value).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[0];
+        current_state.value = Object.values(targets.value).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[1];
         changeState(current_state.value.id);
+
+        //change frame to be mid-framelinked
+        const ld = Object.values(linkData.linkedCanvases.sets).find(l => l.data.instance == props.id);
+        if(ld){
+          const l = ld.data;
+          emitter.emit('changeVideoFrame', [l.instance, l.page, l.vcid, -1, l.frame, false]);
+        }
       });
     };
     const init_videoTargetCache = (cvt_config, renderAppMode, renderMode) => {
