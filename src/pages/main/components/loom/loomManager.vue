@@ -251,7 +251,7 @@ export default {
         dflt = appConfig.value['startState'].saveName;
       let name = prompt(`Enter name to save config as: (default: ${dflt})`);
 
-      if(name == ''){
+      if(!name){
         if(!dflt || dflt == 'None')  return;
         name = dflt;
       }
@@ -266,15 +266,17 @@ export default {
         appMode: appMode.value,
         // current_state: current_state.value,
       };
-      try{
-        localStorage.setItem('saveNames', JSON.stringify([...saveNames]));
-        localStorage.setItem(name, JSON.stringify(appConfig.value));
-        //todo: offer file download
-      } catch (err) {
-        alert(`Could not save to localStorage: ${String(err)}`);
-        console.error(err);
-        //todo: offer file download
-      }
+      nextTick(() => {
+        try{
+          localStorage.setItem('saveNames', JSON.stringify([...saveNames]));
+          localStorage.setItem(name, JSON.stringify(appConfig.value));
+          //todo: offer file download
+        } catch (err) {
+          alert(`Could not save to localStorage: ${String(err)}`);
+          console.error(err);
+          //todo: offer file download
+        }
+      });
     };
     const loadVideoCanvasState = () => {
       let loadOptions = new Set(modifierFileNames.value.map(v => v.split('.')[0]));
@@ -299,16 +301,17 @@ export default {
         if(appConfig.value['startState'] && appConfig.value['startState']['appMode'])
           appMode.value = appConfig.value['startState']['appMode'].map(v => v.split().join('_'));
         init();
-        nextTick(() => {
-          
-        });
       }
 
       const loadName = prompt("Enter file (blank to upload)\n Available names: " + loadOptions.join(', '));
       if(loadName === ''){
         selectFile().then(f => {
-          activate(f);
-          saveVideoCanvasState();
+          const reader = new FileReader();
+          reader.onload = (e) => { 
+            activate(JSON.parse(e.target.result));
+            saveVideoCanvasState(); 
+          }
+          reader.readAsText(f);
         });
       } else if(!loadOptions.some(lo => lo == loadName)){
         alert("File does not exist");

@@ -153,7 +153,7 @@ export default {
         init_videoTargetCache(vtc, m.value, m.renderMode);
         videoCacheModeChange(renderAppMode.value);
 
-        current_state.value = Object.values(targets.value).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[0];
+        current_state.value = Object.values(targets.value).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[1];
         changeState(current_state.value.id);
 
         //change frame to be mid-framelinked
