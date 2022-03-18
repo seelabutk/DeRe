@@ -131,6 +131,8 @@ export default {
         fetch(props.directory + '/' + props.config_filename).then(res => res.text()).then(config => JSON.parse(config)).catch(e => null),
         fetch(props.directory + '/' + props.vtc_filename)   .then(res => res.text()).then(vtc    => JSON.parse(vtc   )).catch(e => null)
       ]).then(([nconfig, vtc]) => {
+        console.log(nconfig, vtc);
+        if(!vtc)  vtc = appConfig.value;
         if(nconfig.info['version'] != loomConfig['version']){
           console.error('ERROR, out of version config file, run Recorder/convert.py');
           return;

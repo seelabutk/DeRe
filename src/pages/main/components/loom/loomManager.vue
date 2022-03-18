@@ -192,7 +192,7 @@ import { ref, reactive, onMounted, computed, provide, inject, nextTick } from 'v
 
 export default {
   components: { loomInstance,  Multiselect },
-  props: ['directories', 'modifier_directory'],
+  props: ['directory', 'modifier_directory'],
   
   setup(props, context){
     //globals
@@ -278,7 +278,7 @@ export default {
         }
       });
     };
-    const loadVideoCanvasState = () => {
+    const loadVideoCanvasState = (loadName) => {
       let loadOptions = new Set(modifierFileNames.value.map(v => v.split('.')[0]));
       let localOptions = localStorage.getItem('saveNames');
       if(localOptions){
@@ -288,22 +288,33 @@ export default {
       
       if(!loadOptions){
         alert("No files to load");
-        //todo: file upload
-        return;
+        return false;
       }
 
       loadOptions = Array.from(loadOptions);
 
       function activate(ac){
         appConfig.value = ac;
-        // if(appConfig.value['startState'] && appConfig.value['startState']['current_state'])
-        //   current_state.value = appConfig.value['startState']['current_state'];
-        if(appConfig.value['startState'] && appConfig.value['startState']['appMode'])
-          appMode.value = appConfig.value['startState']['appMode'].map(v => v.split().join('_'));
-        init();
+        if(appConfig.value['startState'] && appConfig.value['startState']['appMode']){
+          const am = appConfig.value['startState']['appMode'];
+          am.forEach(app => {
+            const appLoc = props.directory + '/' + app;
+            const appName = appLoc.split('/').filter(t => t != '').slice(-1)[0].replaceAll(' ', '_');
+            appModes.push({
+              directory: appLoc,
+              label: (appName.charAt(0).toUpperCase() + appName.slice(1)),
+              minLabel: (appName.charAt(0).toUpperCase() + appName.slice(1)).substr(0,4) + '...',
+              value: appName,
+            });
+          });
+          appMode.value = am.map(v => v.split().join('_'));
+        }
+        nextTick(init);
       }
 
-      const loadName = prompt("Enter file (blank to upload)\n Available names: " + loadOptions.join(', '));
+      if(loadName === undefined){
+        loadName = prompt("Enter file (blank to upload)\n Available names: " + loadOptions.join(', '));
+      }
       if(loadName === ''){
         selectFile().then(f => {
           const reader = new FileReader();
@@ -315,12 +326,13 @@ export default {
         });
       } else if(!loadOptions.some(lo => lo == loadName)){
         alert("File does not exist");
-        return;
+        return false;
       } else {
         const index = loadOptions.indexOf(loadName);
         const file = modifierFiles.value[index];
         if(file)  activate(file);
         else      activate(JSON.parse(localStorage.getItem(loadName)));
+        return true;
       }
     };
     function selectFile (){
@@ -547,7 +559,8 @@ export default {
     const renderMode = ref(null);
     const appConfig = ref({});
     const init = () => {
-      const apps = appModes.map(am => ({selected: appMode.value.includes(am.value), ...am})).slice(0, props.directories.length);
+      if(!appMode.value)  return;
+      const apps = appModes.map(am => ({selected: appMode.value.includes(am.value), ...am}));
       apps.forEach(app => {
         const renderApp = {...app, renderMode: renderMode.value};
         if(appRefs.hasOwnProperty(app.value)){
@@ -557,23 +570,26 @@ export default {
     };
     const getModifierFiles = function(url){
       const queryUrl = 'https://api.github.com/repos/branson2015/DeRe_Apps/git/trees/main?recursive=1';
-      fetch(queryUrl).then(res => res.json()).then(json => {
+      return fetch(queryUrl).then(res => res.json()).then(json => {
         const fileNames = json.tree.map(data => data.path).filter(path => path.substr(0,"demos/demos/".length) === "demos/demos/").map(file => file.substr("/demos/demos".length))
         modifierFileNames.value = fileNames;
         
         const files = fileNames.map(file => fetch(`${props.modifier_directory}/${file}`).then(res => res.json()));
-        Promise.all(files).then(files => {
+        return Promise.all(files).then(files => {
           modifierFiles.value = files;
         });
       });
+    }
+    const ISL_Load = async function(){
+      while(!loadVideoCanvasState('hero')){
+        await utils.sleep(1000);
+      };
     }
 
     onMounted(() => {
 
       if(window.location.hash.substr(1) === 'Edit') editMode.value = true;
-
-      getModifierFiles(props.modifier_directory);
-      
+      getModifierFiles(props.modifier_directory).then(ISL_Load);
 
       window.app = manager;
       const emitter = inject("emitter");
@@ -586,6 +602,8 @@ export default {
       emitter.on('changeVideoFrame', t => changeVideoFrame(...t));
       emitter.on('addComponent', addComponent);
       emitter.on('removeComponet', removeComponent);
+      
+      /*
       props.directories.forEach(d => {
         const appName = d.split('/').filter(t => t != '').slice(-1)[0].replaceAll(' ', '_');
         appModes.push({
@@ -597,13 +615,16 @@ export default {
       });
       appMode.value = appModes[0];
       appModeRef.value.select(appMode.value);
+      */
+
       ['Desktop', 'Mobile'].forEach(d => renderModes.push({
         value: d.toLowerCase(), 
         label: d,
       }));
       renderMode.value = renderModes[0].value;
       renderModeRef.value.select(renderMode.value); 
-      nextTick(init);
+      // nextTick(init);
+      
     });
 
     const manager = {
