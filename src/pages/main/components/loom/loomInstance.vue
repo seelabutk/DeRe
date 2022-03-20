@@ -2,8 +2,8 @@
   <div 
     id="loom"
     :style="{
-      height: config ? config.info.window.height + 'px' : '0px',
-      width:  config ? config.info.window.width  + 'px' : '0px',
+      height: IS_config ? IS_config.info.window.height + 'px' : '0px',
+      width:  IS_config ? IS_config.info.window.width  + 'px' : '0px',
       position: 'absolute',
       'margin-left': 'auto',
       'margin-right': 'auto',
@@ -19,8 +19,8 @@
       :key="key"
       :ref="el => { if(el) videoPlayerRefs[val.id] = el }"
       :style="{
-        width:  config ? config.info.window.width  + 'px' : '0px',
-        height: config ? config.info.window.height + 'px' : '0px',
+        width:  IS_config ? IS_config.info.window.width  + 'px' : '0px',
+        height: IS_config ? IS_config.info.window.height + 'px' : '0px',
       }"
       class="video-js" 
       crossorigin="anonymous"
@@ -39,7 +39,7 @@
       :renderMode="renderMode"
       :renderAppMode="renderAppMode"
       :currentConfig="currentConfig"
-      :info="config.info"
+      :info="IS_config.info"
       :dragMode="dragMode"
       @frame_processed="() => videoTarget.processed = true"
     />
@@ -62,14 +62,6 @@ export default {
   name: 'LoomInstance',
   components: { loomVideoCanvas },
   props: {
-    config_filename: {
-      type: String,
-      default: 'config.json'
-    },
-    vtc_filename: {
-      type: String,
-      default: 'vtc.json'
-    },
     renderMode: String,
     videoTargetCache: {
       type: Object,
@@ -95,7 +87,7 @@ export default {
     //initialization
     const loaded = ref(false);
     const renderAppMode = ref(null);
-    const config = ref(null);
+    const IS_config = ref(null);
     const currentConfig = ref(null);
     const createNewVideoPlayers = (src) => {
       for(let i = 0; i < numVideoPlayers.value; ++i)  createNewVideoPlayer(i, src);
@@ -129,7 +121,7 @@ export default {
       });
     };
     const load = () => {
-      if(loaded.value) return Promise.resolve([config, appConfig.value]);
+      if(loaded.value) return Promise.resolve([IS_config, appConfig.value]);
       return fetch(props.directory + '.rva').then(res => res.blob())
       .then(async blob => {
         const zipReader = new zip.ZipReader(new zip.BlobReader(blob));
@@ -141,36 +133,36 @@ export default {
         reader.onloadend = (e) => createNewVideoPlayers(e.target.result);
         reader.readAsBinaryString(src);
 
-        const config = entries[0].getData(new zip.TextWriter());
-        return config;
+        const IS_config = entries[0].getData(new zip.TextWriter());
+        return IS_config;
       })
-      .then(config => JSON.parse(config)).catch(e => null)
-      .then(nconfig => {
-        if(nconfig == null){
-          console.error('ERROR, config not loaded\n');
+      .then(IS_config => JSON.parse(IS_config)).catch(e => null)
+      .then(nIS_config => {
+        if(nIS_config == null){
+          console.error('ERROR, IS_config not loaded\n');
           return [null, null];
         }
-        if(nconfig.info['version'] != loomConfig['version']){
-          console.error('ERROR, out of version config file, run Recorder/convert.py');
+        if(nIS_config.info['version'] != loomConfig['version']){
+          console.error('ERROR, out of version IS_config file, run Recorder/convert.py');
           return [null, null];
         }
-        config.value = nconfig;
-        currentConfig.value = config.value.hasOwnProperty(renderAppMode.value) ? config.value[renderAppMode.value] : config.value['original'];
+        IS_config.value = nIS_config;
+        currentConfig.value = IS_config.value.hasOwnProperty(renderAppMode.value) ? IS_config.value[renderAppMode.value] : IS_config.value['original'];
         loaded.value = true;
         transformedTargetCache['hidden'] = {};
         props.videoTargetCache['hidden'] = {};
-        transformedTargetCache['original'] = config.value['original'].data;
-        return [config, appConfig.value];
+        transformedTargetCache['original'] = IS_config.value['original'].data;
+        return [IS_config, appConfig.value];
       });
     };
     const init = (m) => {
       renderAppMode.value = `${m.value}_${m.renderMode}`;
-      return load().then(([config, vtc])=>{
-        if(config === null || vtc === null) return;
+      return load().then(([IS_config, ISL])=>{
+        if(IS_config === null || ISL === null) return;
         if(!m.selected) renderAppMode.value = 'hidden';
 
         targetCacheModeChange(renderAppMode.value, m.renderMode);
-        init_videoTargetCache(vtc, m.value, m.renderMode);
+        init_videoTargetCache(ISL, m.value, m.renderMode);
         videoCacheModeChange(renderAppMode.value);
 
         current_state.value = Object.values(targets.value).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[1];
@@ -263,10 +255,10 @@ export default {
     const changeStateWithFrameNo = (frame) => { current_state.value = Object.values(targets.value).find(o => o.frame_no == frame); };
     const targetCacheModeChange = (mode, transform) => {
       if(!transformedTargetCache.hasOwnProperty(mode)){
-        if(!config.value.hasOwnProperty(mode)){
-          config.value[mode] = transformMode(config.value, transformedTargetCache['original'], transform);
+        if(!IS_config.value.hasOwnProperty(mode)){
+          IS_config.value[mode] = transformMode(IS_config.value, transformedTargetCache['original'], transform);
         } 
-        transformedTargetCache[mode] = config.value[mode].data || {};
+        transformedTargetCache[mode] = IS_config.value[mode].data || {};
       }
     };
     const updateInteractionHistory = (target, e, videoCanvas) => {
@@ -394,8 +386,8 @@ export default {
       }
       const region = utils.rectToPoly({
         x: 0, y: 0,
-        width: config.value.info.window.width, 
-        height: config.value.info.window.height,
+        width: IS_config.value.info.window.width, 
+        height: IS_config.value.info.window.height,
       });
       if(!props.videoTargetCache[mode][page] || clear)  props.videoTargetCache[mode][page] = {};
       const id = String(Object.keys(props.videoTargetCache[mode][page]).length);
@@ -449,7 +441,7 @@ export default {
 
     const instance = {
       //state
-      config,
+      IS_config,
       currentConfig,
       current_state,
       loaded,
