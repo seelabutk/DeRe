@@ -188,7 +188,12 @@ import Multiselect from '@vueform/multiselect'
 import loomInstance from './loomInstance.vue'
 import DSet from './utils/disjointset.js'
 import utils from './utils/utils.js'
+import * as zip from '@zip.js/zip.js'
 import { ref, reactive, onMounted, computed, provide, inject, nextTick } from 'vue'
+
+zip.configure({
+  useWebWorkers: false
+});
 
 export default {
   components: { loomInstance,  Multiselect },
@@ -561,10 +566,10 @@ export default {
     const init = () => {
       if(!appMode.value)  return;
       const apps = appModes.map(am => ({selected: appMode.value.includes(am.value), ...am}));
-      apps.forEach(app => {
+      apps.forEach(async app => {
         const renderApp = {...app, renderMode: renderMode.value};
         if(appRefs.hasOwnProperty(app.value)){
-          appRefs[app.value].init(renderApp);
+          await appRefs[app.value].init(renderApp);
         }
       });
     };
@@ -686,6 +691,7 @@ export default {
       selectModeRef,
       appRefs,
       utils,
+      zip,
     };
     provide('manager', manager)
     return manager;

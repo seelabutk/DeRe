@@ -89,7 +89,7 @@ export default {
   setup(props, context){
     //global
     const emitter = inject("emitter");
-    const {appConfig, linkData, appRefs} = inject('manager');
+    const {appConfig, linkData, appRefs, zip} = inject('manager');
 
 
     //initialization
@@ -97,22 +97,25 @@ export default {
     const renderAppMode = ref(null);
     const config = ref(null);
     const currentConfig = ref(null);
-    const createNewVideoPlayer = (id) => {
+    const createNewVideoPlayers = (src) => {
+      for(let i = 0; i < numVideoPlayers.value; ++i)  createNewVideoPlayer(i, src);
+    }
+    const createNewVideoPlayer = (id, src) => {
       const vp = {id, promises: []};
       videoPlayers.push(vp);
       nextTick(()=>{
-        const player = setupVideo(videoPlayerRefs[id]);
+        const player = setupVideo(videoPlayerRefs[id], src);
         if(player) vp.player = player;
         else  console.error("No Player!");
       });
     };
-    const setupVideo = (element) => {
+    const setupVideo = (element, src) => {
       const p = videojs.getPlayer(element);
       if(p) return p;
 
       const videoOptions = {
         sources: [{
-          src: props.directory + '/' + props.video_filename,
+          src: "data:video/mp4;base64,"+btoa(src),
           type: 'video/mp4',
         }],
         controls: false,
@@ -127,15 +130,29 @@ export default {
     };
     const load = () => {
       if(loaded.value) return Promise.resolve([config, appConfig.value]);
-      return Promise.all([
-        fetch(props.directory + '/' + props.config_filename).then(res => res.text()).then(config => JSON.parse(config)).catch(e => null),
-        fetch(props.directory + '/' + props.vtc_filename)   .then(res => res.text()).then(vtc    => JSON.parse(vtc   )).catch(e => null)
-      ]).then(([nconfig, vtc]) => {
-        console.log(nconfig, vtc);
-        if(!vtc)  vtc = appConfig.value;
+      return fetch(props.directory + '.rva').then(res => res.blob())
+      .then(async blob => {
+        const zipReader = new zip.ZipReader(new zip.BlobReader(blob));
+
+        const entries = await zipReader.getEntries();
+        const src = await entries[1].getData(new zip.BlobWriter());
+        
+        let reader = new FileReader();
+        reader.onloadend = (e) => createNewVideoPlayers(e.target.result);
+        reader.readAsBinaryString(src);
+
+        const config = entries[0].getData(new zip.TextWriter());
+        return config;
+      })
+      .then(config => JSON.parse(config)).catch(e => null)
+      .then(nconfig => {
+        if(nconfig == null){
+          console.error('ERROR, config not loaded\n');
+          return [null, null];
+        }
         if(nconfig.info['version'] != loomConfig['version']){
           console.error('ERROR, out of version config file, run Recorder/convert.py');
-          return;
+          return [null, null];
         }
         config.value = nconfig;
         currentConfig.value = config.value.hasOwnProperty(renderAppMode.value) ? config.value[renderAppMode.value] : config.value['original'];
@@ -143,12 +160,13 @@ export default {
         transformedTargetCache['hidden'] = {};
         props.videoTargetCache['hidden'] = {};
         transformedTargetCache['original'] = config.value['original'].data;
-        return [config, vtc];
+        return [config, appConfig.value];
       });
     };
     const init = (m) => {
       renderAppMode.value = `${m.value}_${m.renderMode}`;
-      load().then(([config, vtc])=>{
+      return load().then(([config, vtc])=>{
+        if(config === null || vtc === null) return;
         if(!m.selected) renderAppMode.value = 'hidden';
 
         targetCacheModeChange(renderAppMode.value, m.renderMode);
@@ -271,6 +289,7 @@ export default {
         return;
       }
       const vp = videoPlayers[lastUsedVideoPlayer.value];
+      if(!vp) return;
       lastUsedVideoPlayer.value = (lastUsedVideoPlayer.value+1)%numVideoPlayers.value;
       new Promise((res, rej) => {
         vp.promises.push(res);
@@ -427,10 +446,6 @@ export default {
       }
       currentVideoTargets.value[copy.id] = copy
     };
-
-
-    onMounted((t) => { for(let i = 0; i < numVideoPlayers.value; ++i)  createNewVideoPlayer(i); });
-
 
     const instance = {
       //state

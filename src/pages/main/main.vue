@@ -20,7 +20,7 @@ export default {
   },
   data: function(){
     const modifier_directory = 'https://raw.githubusercontent.com/branson2015/DeRe_Apps/main/demos/demos';
-    const baseURL = 'https://raw.githubusercontent.com/branson2015/DeRe_Apps/main/apps/';
+    const baseURL = 'https://raw.githubusercontent.com/branson2015/DeRe_Apps/main/RVA';
     
     return {
       directory: baseURL,
