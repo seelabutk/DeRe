@@ -1,0 +1,12 @@
+{
+  "version": "0.0.7",
+  "mobile": {
+    "mappings": {
+      "loomHover": "loomButton"
+    },
+    "spatialTransform": {
+      "horizontal_buttons_to_dropdown": true,
+      "vertical_buttons_to_dropdown": true
+    }
+  }
+}
