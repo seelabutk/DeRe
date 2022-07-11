@@ -437,7 +437,7 @@ export default {
       if(!dragMode.value && currentPolygonMask.value){
         drawPolyOutline(ctx.value, currentPolygonMask.value);
       }
-      if(emit) emitter.emit('post_redraw' + props.targetData.id)
+      if(emit) emitter.emit('post_redraw' + props.targetData.id);
       processFrame();
       throttle.value = true;
       setTimeout(() => throttle.value=false, 20);

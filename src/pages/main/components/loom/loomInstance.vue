@@ -165,7 +165,7 @@ export default {
         init_videoTargetCache(ISL, m.value, m.renderMode);
         videoCacheModeChange(renderAppMode.value);
 
-        current_state.value = Object.values(targets.value).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[1];
+        current_state.value = Object.values(targets.value).filter(t => t.frame_no > 0).sort((a,b) => a.frame_no - b.frame_no)[0];
         changeState(current_state.value.id);
 
         //change frame to be mid-framelinked
@@ -283,7 +283,7 @@ export default {
       const vp = videoPlayers[lastUsedVideoPlayer.value];
       if(!vp) return;
       lastUsedVideoPlayer.value = (lastUsedVideoPlayer.value+1)%numVideoPlayers.value;
-      new Promise((res, rej) => {
+      return new Promise((res, rej) => {
         vp.promises.push(res);
         if(!vp.inUse){
           res(res);
@@ -348,13 +348,13 @@ export default {
     const transformedTargetCache = reactive({});
     const computeCurrentVideoTargets = computed(() => {
       if(!current_state.value || !props.videoTargetCache[renderAppMode.value]) return [null, null];
+      const vts = Object.entries(props.videoTargetCache[renderAppMode.value]);
       let vt = null;
       let page = '-1';
       //traverse up parents
       for(let cs = current_state.value; vt === null && cs && cs.id != cs.parent_id; cs = targets.value[cs.parent_id]){
         if(typeof cs.frame_no === "string" && cs.frame_no.includes("frameless")) continue;
         //check if any of our videoTargets is an ancestor of our current state
-        const vts = Object.entries(props.videoTargetCache[renderAppMode.value]);
         for(let i = 0; i < vts.length; ++i){
           if(String(cs.id) === vts[i][0]){
             vt = vts[i][1];
@@ -391,6 +391,7 @@ export default {
       });
       if(!props.videoTargetCache[mode][page] || clear)  props.videoTargetCache[mode][page] = {};
       const id = String(Object.keys(props.videoTargetCache[mode][page]).length);
+
       props.videoTargetCache[mode][page][id] = {
         page,
         id,

@@ -136,7 +136,7 @@
 
       <div>
         <font-awesome-icon icon="save" class="activeInput" @click="saveVideoCanvasState"/> &nbsp;
-        <font-awesome-icon icon="file" class="activeInput" @click="loadVideoCanvasState"/>
+        <font-awesome-icon icon="file" class="activeInput" @click="() => loadVideoCanvasState(undefined)"/>
       </div>
 
       <span class="text" style="margin-top: 40px;">Mode</span>
@@ -394,8 +394,8 @@ export default {
       regionOrigin.value.cutSelectedRegion();
     };
     const changeVideoFrame = (instance, page, vcid, lastFrame, frame, emit) => {
+      const rets = [];
       if(linkData.linkedCanvases.exists(`${instance}_${page}_${vcid}_${frame}`)){ //per-frame links
-        const rets = [];  
         linkData.linkedCanvases.of(`${instance}_${page}_${vcid}_${frame}`).forEach(d => {
           if(d.componentID === undefined){
             if(appRefs[d.instance]){
@@ -404,7 +404,6 @@ export default {
             } 
           }
         });
-        return rets;
       } /*else if(linkData.linkedCanvases.exists(`${instance}_${page}_${vcid}_all`)){ //instance links (all frames linked) 
         linkData.linkedCanvases.of(`${instance}_${page}_${vcid}_all`).forEach(d => {
           if(appRefs[d.instance] && d.instance === instance){
@@ -412,13 +411,12 @@ export default {
           }
         });
       }*/ else { //no link, just update current instance's vcid's frame
-        const rets = [];
         if(appRefs[instance]){
           appRefs[instance].changeVideoFrame(page, vcid, frame, emit);
           rets.push({instance, page, vcid});
-        }
-        return rets;
+        }  
       }
+      return rets;
     };
 
 
@@ -576,17 +574,36 @@ export default {
     const getModifierFiles = function(url){
       const queryUrl = 'https://api.github.com/repos/branson2015/DeRe_Apps/git/trees/main?recursive=1';
       return fetch(queryUrl).then(res => res.json()).then(json => {
-        const fileNames = json.tree.map(data => data.path).filter(path => path.substr(0,"demos/demos/".length) === "demos/demos/").map(file => file.substr("/demos/demos".length))
-        modifierFileNames.value = fileNames;
+        const data = json.tree.map(data => data.path);
+        const demoFileNames = data.filter(path => path.substr(0,"demos/demos/".length) === "demos/demos/").map(file => file.substr("demos/demos/".length));
+        const rvaFileNames = data.filter(path => path.substr(0, "RVA/".length) === "RVA/").map(file => file.substr("RVA/".length));
+        modifierFileNames.value = demoFileNames;
+
+        const files = modifierFileNames.value.map(file => fetch(`${props.modifier_directory}/${file}`).then(res => res.json()));
         
-        const files = fileNames.map(file => fetch(`${props.modifier_directory}/${file}`).then(res => res.json()));
+        const rvaFiles = rvaFileNames.map(fileName => {
+          const file = fileName.slice(0, -4);
+          modifierFileNames.value.push(file);
+          return {
+            "hidden": {},
+            [file] : {},
+            "startState": {
+              "saveName": file,
+              "appMode": [
+                file
+              ],
+              "current_state": 0
+            }
+          };
+        });
+
         return Promise.all(files).then(files => {
-          modifierFiles.value = files;
+          modifierFiles.value = [...files, ...rvaFiles];
         });
       });
     }
     const ISL_Load = async function(){
-      while(!loadVideoCanvasState('hero')){
+      while(!loadVideoCanvasState('fig4_2')){
         await utils.sleep(1000);
       };
     }

@@ -1,11 +1,12 @@
 function currentTargets(current_state, targets){
   if(!current_state) return {};
   const cts = objectFilter(targets, target => {
-    return target.hide != true &&
+    return target.hide !== true &&
      target.id != '-1' && 
      (
       isChild(current_state, target) ||
-     (current_state.deactivateOnTransition !== true && isSibling(targets, target, current_state))
+     (current_state.deactivateOnTransition !== true && isSibling(targets, target, current_state)) ||
+     target.parent_id == '-1' //TODO: make this betterrrr
     ) || target.important;
   });
   return cts;
@@ -204,6 +205,8 @@ function getComponentFromPoint(manager, x, y){
 export default {
   //loom utils
   currentTargets,
+  isChild,
+  isSibling,
 
   //generic utils
   objectFilter,
