@@ -28,8 +28,9 @@
 
 <script>
 //todo: brushing backwards
-
+import $ from 'jquery'
 import mixin from './loomBase'
+
 export default {
   name: 'loomBrushingBox',
   mixins: [mixin],

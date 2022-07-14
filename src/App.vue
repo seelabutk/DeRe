@@ -33,12 +33,14 @@ export default {
 }
 
 html, body, #app {
-  height: 100%;
+  height: 100vh;
+  width: 100vw;
   margin: 0px;
 }
 
 body {
-  background-color: rgb(30,30,30)
+  background-color: #aaa;
+  overflow: hidden;
 }
 
 #app {

@@ -33,5 +33,6 @@ const emitter = myMitt();
 const app = createApp(App);
 app.config.globalProperties.emitter = emitter;
 app.provide('emitter', emitter);
+
 app.component('font-awesome-icon', FontAwesomeIcon);
 app.mount('#app');

@@ -17,9 +17,8 @@
         left: left + 'px',
         clipPath: `url(#clipping-${instanceID}-${id})`,
       }"
-      @click="e => {dragging=false; emitter.emit('clickVideoCanvas', e); }"
+      @click="e => {emitter.emit('clickVideoCanvas', e); }"
       @mousedown="onVideoMouseDown"
-      @mouseleave="dragging=false"
     >
       <!-- canvas element to redraw video !-->
       <div>
@@ -61,7 +60,7 @@
           :vcTargetData="targetData"
           :targets="targets"
           :showHint="overlay"
-          :interactable="!regionSelect"
+          :interactable="!(moveRegionMode || editRegionMode || frameLinkMode)"
           @change-state="changeState"
           @add-history="addHistory"
         />
@@ -101,7 +100,7 @@ import { ref, toRefs, reactive, onMounted, onBeforeUnmount, computed, provide, i
 export default {
   name: 'loomVideoCanvas',
   emits: ['frame_processed'],
-  props: ['regionSelect', 'overlay', 'renderMode', 'renderAppMode', 'dragMode', 'info', 'targets', 'targetData', 'instanceID', 'start_state_id'],
+  props: ['frameLinkMode', 'moveRegionMode', 'editRegionMode', 'overlay', 'renderMode', 'renderAppMode', 'info', 'targets', 'targetData', 'instanceID', 'start_state_id'],
   components: { loomButton, loomHover, loomDropdown, loomBrushingBox, loomUSA },
   setup(props, context){
     //globals
@@ -203,7 +202,7 @@ export default {
       redraw();
     };
     const isPolygonVertexHovered = (e) => {
-      if(!props.regionSelect) return -1;
+      if(!props.editRegionMode) return -1;
       const thickness = 2;
       const boxSize = 8;
       const bs = Math.ceil(boxSize/2 + thickness/2);
@@ -219,7 +218,7 @@ export default {
       return paths.findIndex(path => ctx.value.isPointInPath(path, e.x, e.y));
     };
     const isPolygonLineHovered = (e) => {
-      if(!props.regionSelect) return -1;
+      if(!props.editRegionMode) return -1;
       const lines = currentPolygonMaskScaled.value.map((pm, i, pms) => {
         const nidx = (i+1)%pms.length;
         const pn = pms[nidx];
@@ -255,8 +254,7 @@ export default {
     const lastMouseLoc = ref({x: 0, y: 0});
     const mouseLoc = ref({x: 0, y: 0});
     const selected = ref(false);
-    const dragging = ref(false);
-    const { dragMode } = toRefs(props);
+    const { editRegionMode } = toRefs(props);
     const dragSelectStyle = computed(() => {
       const top = Math.min(dragStart.value.y, dragCurr.value.y) + 'px';
       const left = Math.min(dragStart.value.x, dragCurr.value.x) + 'px';
@@ -271,7 +269,7 @@ export default {
         top, left, width, height,
       };
     });
-    watch(dragMode, (v) => { redraw(); });
+    watch(editRegionMode, () => { redraw(false, true); });
     const clientToOffset = (e) => {
       const {left, top} = containerRef.value.getBoundingClientRect();
       return {x: e.clientX - left - props.targetData.left, y: e.clientY - top - props.targetData.top};
@@ -279,43 +277,44 @@ export default {
     const onScreenMouseMove = (e) => {
       lastMouseLoc.value = mouseLoc.value;
       mouseLoc.value = clientToOffset(e);
-      if(reshapePolygonMode.value){
+
+      if(reshapePolygonMode.value && props.targetData.reshapeable !== false){
         reshapePolygon(mouseLoc.value);
         return;
       } else if(resizePolygonMode.value && props.targetData.resizeable !== false){
         resizePolygon();
         return;
-      } else if(!dragMode.value && props.targetData.reshapeable !== false || props.targetData.resizeable !== false) {
+      } else if(editRegionMode.value && (props.targetData.reshapeable !== false || props.targetData.resizeable !== false)) {
         if(isPolygonVertexHovered(mouseLoc.value) >= 0){
           document.body.style.cursor = 'move';
         } else if(isPolygonLineHovered(mouseLoc.value) >= 0) {
           document.body.style.cursor = 'crosshair';
         }
       }
-      if(!selected.value)  return;
-      if(!dragging.value)  return;
-      if(props.targetData.movable === false)  return;
-      dragCurr.value = mouseLoc.value;
-      if(dragMode.value){
-        props.targetData.top += e.movementY;
-        props.targetData.left += e.movementX;
+      if(selected.value && props.targetData.movable !== false){
+        if(props.moveRegionMode){
+          props.targetData.top += e.movementY;
+          props.targetData.left += e.movementX;
+        }
+        dragCurr.value = mouseLoc.value;
       }
     };
     const onScreenMouseDown = (e) => {
       const mouseLoc = clientToOffset(e);
       const shift = e.shiftKey;
-      if(props.targetData.reshapeable !== false || props.targetData.resizeable !== false){
-        const reshapePoly = isPolygonVertexHovered(mouseLoc);
-        if(reshapePoly >= 0 && !dragMode.value){
+      if(editRegionMode.value && (props.targetData.reshapeable !== false || props.targetData.resizeable !== false)){
+        const vertexHovered = isPolygonVertexHovered(mouseLoc);
+        if(vertexHovered >= 0){
           if(shift && props.targetData.resizeable !== false){
             resizePolygonMode.value = true;
+            reshapePolygonMode.value = false;
           } else if(props.targetData.reshapeable !== false) {
             resizePolygonMode.value = false;
             reshapePolygonMode.value = true;
-            polygonReshapeIdx.value = reshapePoly;
+            polygonReshapeIdx.value = vertexHovered;
           }
         }
-        if(reshapePoly < 0 && props.targetData.reshapeable !== false){
+        if(vertexHovered < 0 && props.targetData.reshapeable !== false){
           const newVertex = isPolygonLineHovered(mouseLoc);
           if(newVertex >= 0){  
             addNewVertex(newVertex, mouseLoc);
@@ -325,37 +324,36 @@ export default {
       }
     };
     const onVideoMouseDown = (e) => {
+      emitter.emit('deselectAll');
       document.body.style.cursor = 'default';
-      selected.value = true;
       mouseLoc.value = clientToOffset(e);
-      if(!dragMode.value){
+      if(editRegionMode.value){
         dragCurr.value = dragStart.value = mouseLoc.value;
       }else{
         dragCurr.value = dragStart.value = {x: -10000, y: -10000};
       }
-      emitter.emit('deselect');
       selected.value = true;
       emitter.emit("selectVideoCanvas", videoCanvasRef.value);
-      dragging.value = props.regionSelect;
       return false;
     };
     const onScreenMouseUp = (e) => {
-      dragging.value = false;
       selected.value = false;
       resizePolygonMode.value = false;
       reshapePolygonMode.value = false;
       document.body.style.cursor = 'default';
     };
     const clearSelection = () => {
-      dragging.value = false;
       dragStart.value = dragCurr.value = {x: -10000, y: -10000};
     };
-    const deselect = () => { selected.value = false; };
+    const deselect = () => { 
+      selected.value = false;
+      dragStart.value.x = dragStart.value.y = dragCurr.value.x = dragCurr.value.y = -10000;
+    };
 
 
-    //regions
+    //moving
     const regionExists = computed(() => {
-      if(dragMode.value || !props.regionSelect)  return false;
+      if(!editRegionMode.value || props.moveRegionMode)  return false;
       if(
         dragStart.value.x == -10000 ||
         dragStart.value.y == -10000 ||
@@ -387,7 +385,7 @@ export default {
           parentCanvas: props.targetData.id, 
           startupFn: c => {
             c.cutRegions(regions, cutout, copyUI);
-            c.emitter.emit('deselect');
+            c.emitter.emit('deselectAll');
             delete c.targetData.startupFn;
           },
           processed: true,
@@ -408,7 +406,7 @@ export default {
           parentCanvas: props.targetData.id,
           cutouts: [],
           startupFn: c => {
-            c.emitter.emit('deselect');
+            c.emitter.emit('deselectAll');
             delete c.targetData.startupFn;
           },
           processed: true,
@@ -419,7 +417,7 @@ export default {
 
     //drawing
     const ctx = ref(null);
-    const redraw = (emit=false) => { emitter.emit('changeVideoFrame', [props.instanceID, page.value, id.value, lastFrame.value, emit]); };
+    const redraw = (emit=false, force=false) => { emitter.emit('changeVideoFrame', [props.instanceID, page.value, id.value, lastFrame.value, lastFrame.value, emit, force]); };
     const draw = (videoPlayer, emit = true) => {
       if(throttle.value || !videoPlayer) return;
       ctx.value.restore();
@@ -434,7 +432,7 @@ export default {
           0, 0, width.value, height.value
         );
       }
-      if(!dragMode.value && currentPolygonMask.value){
+      if(editRegionMode.value && currentPolygonMask.value){
         drawPolyOutline(ctx.value, currentPolygonMask.value);
       }
       if(emit) emitter.emit('post_redraw' + props.targetData.id);
@@ -557,12 +555,12 @@ export default {
         props.targetData.startupFn(videoCanvasRef.value);
       }
       emitter.on('clearSelection', clearSelection);
-      emitter.on('deselect', deselect);
+      emitter.on('deselectAll', deselect);
       emitter.on(`changeState-${props.targetData.id}`, changeState);
       emitter.on('mousemove', onScreenMouseMove);
       emitter.on('mouseup', onScreenMouseUp);
       emitter.on('mousedown', onScreenMouseDown);
-      selected.value = true;
+      selected.value = false;
       emitter.emit("selectVideoCanvas", videoCanvasRef.value);
     });
 
@@ -575,7 +573,7 @@ export default {
       }
       //delete event listeners
       emitter.off('clearSelection', clearSelection);
-      emitter.off('deselect', deselect);
+      emitter.off('deselectAll', deselect);
       emitter.off(`changeState-${props.targetData.id}`, changeState);
       emitter.off('mousemove', onScreenMouseMove);
       emitter.off('mouseup', onScreenMouseUp);
@@ -592,7 +590,6 @@ export default {
       dragCurr,
       lastMouseLoc,
       mouseLoc,
-      dragging,
       reshapePolygonMode, 
       resizePolygonMode,
       ctx, 
@@ -601,7 +598,7 @@ export default {
       updateParentCurrentState,
       lastFrame,
       throttle,
-      dragMode,
+      editRegionMode,
       scale,
       //refs
       loomVideoCanvasRefs,

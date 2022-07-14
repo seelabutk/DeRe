@@ -4,9 +4,10 @@
     :style="{
       height: IS_config ? IS_config.info.window.height + 'px' : '0px',
       width:  IS_config ? IS_config.info.window.width  + 'px' : '0px',
-      position: 'absolute',
+      position: 'relative',
       'margin-left': 'auto',
       'margin-right': 'auto',
+      'margin-top': '25px',
       left: 0,
       right: 0,
       'text-align': 'center',
@@ -34,13 +35,14 @@
       :targets="videoTarget.targets || targets"
       :targetData="videoTarget"
       :start_state_id="current_state.id"
-      :regionSelect="regionSelect"
+      :moveRegionMode="moveRegionMode"
+      :frameLinkMode="frameLinkMode"
       :overlay="overlay"
       :renderMode="renderMode"
       :renderAppMode="renderAppMode"
       :currentConfig="currentConfig"
       :info="IS_config.info"
-      :dragMode="dragMode"
+      :editRegionMode="editRegionMode"
       @frame_processed="() => videoTarget.processed = true"
     />
   </div>
@@ -72,16 +74,17 @@ export default {
       default: 'video.mp4'
     },
     directory: String,
-    regionSelect:  Boolean,
+    moveRegionMode: Boolean,
+    frameLinkMode: Boolean,
+    editRegionMode: Boolean,
     overlay: Boolean,
-    dragMode: Boolean,
     id: String,
     name: String,
   },
   setup(props, context){
     //global
     const emitter = inject("emitter");
-    const {appConfig, linkData, appRefs, zip} = inject('manager');
+    const {appConfig, linkedCanvases, appRefs, zip} = inject('manager');
 
 
     //initialization
@@ -169,7 +172,7 @@ export default {
         changeState(current_state.value.id);
 
         //change frame to be mid-framelinked
-        const ld = Object.values(linkData.linkedCanvases.sets).find(l => l.data.instance == props.id);
+        const ld = Object.values(linkedCanvases.value.sets).find(l => l.data.instance == props.id);
         if(ld){
           const l = ld.data;
           emitter.emit('changeVideoFrame', [l.instance, l.page, l.vcid, -1, l.frame, false]);
@@ -199,18 +202,18 @@ export default {
             /*if(lf.instance == ld.instance){
               const linkFromName = `${ld.instance}_${ld.page}_${ld.vcid}_all`;
               const linkToName   = `${lf.instance}_${lf.page}_${lf.vcid}_all`;
-              if(!linkData.linkedCanvases.exists(linkFromName))  linkData.linkedCanvases.add(linkFromName, ld);
-              if(!linkData.linkedCanvases.exists(linkToName  ))  linkData.linkedCanvases.add(linkToName  , lf);
-              linkData.linkedCanvases.merge(linkFromName, linkToName);
+              if(!linkedCanvases.value.exists(linkFromName))  linkedCanvases.value.add(linkFromName, ld);
+              if(!linkedCanvases.value.exists(linkToName  ))  linkedCanvases.value.add(linkToName  , lf);
+              linkedCanvases.value.merge(linkFromName, linkToName);
             } else {*/
               for(const frame of lf.frames){
                 const ldc = {...ld, frame: frame[0]};
                 const lfc = {...lf, frame: frame[1]};
                 const linkFromName = `${ldc.instance}_${ldc.page}_${ldc.vcid}_${ldc.frame}`;
                 const linkToName   = `${lfc.instance}_${lfc.page}_${lfc.vcid}_${lfc.frame}`;
-                if(!linkData.linkedCanvases.exists(linkFromName))  linkData.linkedCanvases.add(linkFromName, ldc);
-                if(!linkData.linkedCanvases.exists(linkToName  ))  linkData.linkedCanvases.add(linkToName  , lfc);
-                linkData.linkedCanvases.merge(linkFromName, linkToName);
+                if(!linkedCanvases.value.exists(linkFromName))  linkedCanvases.value.add(linkFromName, ldc);
+                if(!linkedCanvases.value.exists(linkToName  ))  linkedCanvases.value.add(linkToName  , lfc);
+                linkedCanvases.value.merge(linkFromName, linkToName);
               }
             // }
           }
