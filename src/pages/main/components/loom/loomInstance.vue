@@ -4,7 +4,7 @@
     :style="{
       height: IS_config ? IS_config.info.window.height + 'px' : '0px',
       width:  IS_config ? IS_config.info.window.width  + 'px' : '0px',
-      position: 'relative',
+      position: 'absolute',
       'margin-left': 'auto',
       'margin-right': 'auto',
       'margin-top': '25px',

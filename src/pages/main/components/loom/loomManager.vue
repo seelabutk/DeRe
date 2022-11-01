@@ -281,7 +281,6 @@ export default {
       });
     };
     const getModifierFiles = function(url){
-      console.log(url)
       const queryUrl = 'https://api.github.com/repos/branson2015/DeRe_Apps/git/trees/main?recursive=1';
       return fetch(queryUrl).then(res => res.json()).then(json => {
         const data = json.tree.map(data => data.path);
@@ -409,6 +408,8 @@ export default {
       appRefs,
       utils,
       zip,
+
+      emitter
     };
     provide('manager', manager)
     return manager;

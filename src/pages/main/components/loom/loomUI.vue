@@ -21,35 +21,6 @@
             <ul class="tool-column"
             style="height: 60vh;">
                 
-                <!-- Mode selector !-->
-                <!-- <li class="tool-item">
-                    <span class="text" style="margin-top: 40px;">Mode</span>
-                    <multiselect
-                        ref="renderModeRef" 
-                        mode="single"
-                        :canDeselect="false"
-                        :canClear="false"
-                        :options="renderModes"
-                        @change="renderModeChange"
-                    />
-                </li> !-->
-                
-                <!-- App selector !-->
-                <!-- <li class="tool-item">
-                    <span class="text" style="margin-top: 40px;" >App</span>
-                    <multiselect 
-                        ref="appModeRef"
-                        v-model="appMode" 
-                        mode="tags" 
-                        label='minLabel'
-                        :options="appModes"
-                        :searchable="true"
-                        :createTag="true"
-                        @change="onAppModeChange"
-                        class='appModeMultiselect'
-                    />
-                </li> !-->
-
                 <!-- Region Move Toggle !-->
                 <li class="tool-item-left"
                 @click="regionMoveToggled"
@@ -91,7 +62,7 @@
 
         <div class="right">
 
-            <!-- editing !-->
+            <!-- Moving !-->
             <ul class="tool-column tool-change" id="moveRegion">
 
                 <!-- reset the canvas and all cutouts for current target!-->
@@ -153,14 +124,42 @@
 
             </ul>
 
-
+            <!-- Editing !-->
             <ul class="tool-column tool-change" id="editRegion">
               <!-- cut, copy & paste selected regions (only available when region has been selected) !-->
                 <li class="tool-item"
                 :class="editRegionMode && manager.regionExists ? 'activeInput' : 'inactiveInput'"
-                @click="() => emitEvent('newRegionClicked')">
+                @click="emitEvent('newRegionClicked')">
                     <font-awesome-icon icon="border-none"/>
                 </li>
+
+                <!-- Scale !-->
+                <!--
+                <li class="tool-item"
+                :class="editRegionMode ? 'activeInput' : 'inactiveInput'"
+                @click="rescale">
+                  <font-awesome-icon icon=""/>
+                </li>
+                !-->
+
+                <!-- Add Vertex !-->
+                <!--
+                <li class="tool-item"
+                :class="editRegionMode ? 'activeInput' : 'inactiveInput'"
+                @click="rescale">
+                  <font-awesome-icon icon=""/>
+                </li>
+                !-->
+
+                <!-- Delete Vertex !-->
+                <!--
+                <li class="tool-item"
+                :class="editRegionMode ? 'activeInput' : 'inactiveInput'"
+                @click="rescale">
+                  <font-awesome-icon icon=""/>
+                </li>
+                !-->
+
             </ul>
 
 
@@ -424,7 +423,6 @@ export default {
 
 
 //TODO: fix frame linking
-// make seperate menus appear when modes are changed
 // fill out edit mode w/ scale, add/delete nodes, etc
 // create new linking mode w/ greater ability to link frames (maybe get ambitious with a state/link graph viewer?)
 
@@ -438,7 +436,17 @@ export default {
 </script>
 
 <style src="@vueform/multiselect/themes/default.css"></style>
-<style scoped>
+<style>
+/* can't do style scoped with :root variables */
+
+:root {
+  --color1: #f6f8f7;
+  --color2: #e4f5e9;
+  --color3: #8ed6c8;
+  --color4: #41ad89;
+  --color5: #4c5b62;
+  --color6: #1a2225;
+}
 
 html {
   box-sizing: border-box;
@@ -469,7 +477,7 @@ body {
   grid-template-rows: 60px 1fr 0px;
   grid-template-columns: 240px 1fr 120px;
   grid-template-areas: 
-    'left header header' 
+    'header header header' 
     'left middle right' 
     'footer footer footer';
   /* grid-column-gap: 10px; - if you want gap between the columns */
@@ -478,21 +486,21 @@ body {
 /* Style the header */
 .header {
   grid-area: header;
-  background-color: #f1f1f1;
+  background-color: var(--color4);
   text-align: center;
   font-size: 40px;
   line-height: 60px;
-  color: #38cdff;
+  color: var(--color1);
   padding: 0;
   margin: 0;
   height: 60px;
-  -webkit-text-stroke: 1px #282828;
-	text-shadow: 0px 2px 2px #282828;
+  -webkit-text-stroke: 1px var(--color2);
+	text-shadow: 0px 2px 2px var(--color2);
   font-weight: bold;
 }
 
 .left, .right, .footer{
-  background-color: #f1f1f1;
+  background-color: var(--color3);
 }
 
 /* Style the left column */
@@ -504,6 +512,7 @@ body {
 .middle {
   grid-area: middle;
   overflow: hidden;
+  background-color: var(--color1);
 }
 
 /* Style the right column */
@@ -551,7 +560,7 @@ body {
 
 
 .tool-item, .tool-item-left, .activeInput {
-  background-color: #38cdff;
+  background-color: var(--color4);
   cursor: pointer;
 }
 
@@ -570,7 +579,11 @@ body {
 }
 
 .tool-item-left{
-  width: 90%;
+  width: 90% !important;
+}
+
+.tool-change {
+  margin-top: 10px;
 }
 
 .activeInput {
@@ -579,13 +592,13 @@ body {
 }
 
 .inactiveInput {
-  background-color: #004055;
+  background-color: var(--color2);
   color: grey;
   cursor: default;
 }
 
 .toggledOnInput {
-  background-color: #6ddaff;
+  background-color: var(--color4);
 }
 
 .loadSave {
