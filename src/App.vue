@@ -39,7 +39,6 @@ html, body, #app {
 }
 
 body {
-  background-color: #aaa;
   overflow: hidden;
 }
 

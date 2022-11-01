@@ -1,11 +1,16 @@
 <template>
 
-    <div class="grid-container">
-        <div class="header">
+    <div class="grid-container" :style="{
+      'grid-template-rows': displayUI ? '60px 1fr 0px' : '0px 1fr 0px',
+      'grid-template-columns': displayUI ? '240px 1fr 120px' : '0px 1fr 0px',
+    }">
+        <div class="header" :style="{display: displayUI ? 'block' : 'none'}">
             {{manager ? manager.appMode[0] : ''}}
         </div>
         
-        <div class="left">
+        <div class="left" :style="{
+          display: displayUI ? 'block' : 'none'
+        }">
             <div class="tool-column"
             style="height: 20vh">
               <ul class="tool-row">
@@ -60,7 +65,7 @@
 
         <div class="middle"><slot/></div>  
 
-        <div class="right">
+        <div class="right" :style="{display: displayUI ? 'block' : 'none'}">
 
             <!-- Moving !-->
             <ul class="tool-column tool-change" id="moveRegion">
@@ -368,7 +373,7 @@ export default {
     }
 
 
-
+    const displayUI = ref(false);
 
     const regionMoveToggled = () => { radioToggle('moveRegionMode'); }
     const regionEditToggled = () => { radioToggle('editRegionMode'); }
@@ -385,7 +390,12 @@ export default {
         emitter.on("clickVideoCanvas", videoCanvasClicked);
         emitter.on('ready', () => {
           manager.value = emitter.emit('getManager')[0];
-          emitter.emit('loadVideoCanvasState', 'tableau'); //todo: loading bar
+
+          let loadApp = 'tableau';
+          if(window.location.hash !== ''){
+            loadApp = window.location.hash.substring(1);
+          }
+          emitter.emit('loadVideoCanvasState', loadApp);
         });
 
         $('.tool-change').css('display', 'none');
@@ -411,6 +421,7 @@ export default {
         regionEditToggled,
         frameLinkEditToggled,
         hintToggled,
+        displayUI,
     };
     provide('UI', ret);
     return ret;
@@ -460,6 +471,7 @@ html *::before {
 
 body {
   font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color1);
 }
 
 .appModeMultiselect {
@@ -511,8 +523,7 @@ body {
 /* Style the middle column */
 .middle {
   grid-area: middle;
-  overflow: hidden;
-  background-color: var(--color1);
+  overflow: scroll;
 }
 
 /* Style the right column */
